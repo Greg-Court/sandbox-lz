@@ -8,6 +8,8 @@ Install-WindowsFeature -Name AD-Domain-Services -IncludeManagementTools
 # Promote the server to a Domain Controller
 Install-ADDSForest -DomainName '${active_directory_domain}' -InstallDns -SafeModeAdministratorPassword $password -Force
 
+# Add a DNS forwarder to firewall IP
+Add-DnsServerForwarder -IPAddress '${firewall_private_ip}'
 
 ######### filename: outputs.tf #########
 output "firewall_public_ip" {
@@ -22,11 +24,17 @@ locals {
       resource_group_name = azurerm_resource_group.hub.name
       routes = [
         {
-          name                   = "Internet-to-Firewall"
-          address_prefix         = "0.0.0.0/0"
+          name                   = "MainVNet-to-Firewall"
+          address_prefix         = tolist(azurerm_virtual_network.vnets["vnet-main-${var.loc_short}-01"].address_space)[0]
           next_hop_type          = "VirtualAppliance"
           next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
-        }
+        },
+        {
+          name                   = "ADDSVNet-to-Firewall"
+          address_prefix         = tolist(azurerm_virtual_network.vnets["vnet-adds-${var.loc_short}-01"].address_space)[0]
+          next_hop_type          = "VirtualAppliance"
+          next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
+        },
       ]
       associations = [
         {
@@ -145,11 +153,12 @@ resource "azurerm_subnet_route_table_association" "associations" {
 ######### filename: domain_controller.tf #########
 locals {
   domain_controller_ip = "10.1.0.4"
-    addc_script_base64 = base64encode(templatefile("${path.module}/addc_script.ps1", {
-      username                = var.admin_username,
-      password                = var.admin_password,
-      active_directory_domain = var.active_directory_domain
-    }))
+  addc_script_base64 = base64encode(templatefile("${path.module}/addc_script.ps1", {
+    username                = var.admin_username,
+    password                = var.admin_password,
+    active_directory_domain = var.active_directory_domain
+    firewall_private_ip     = azurerm_firewall.primary.ip_configuration[0].private_ip_address
+  }))
 }
 
 resource "azurerm_virtual_machine_extension" "dc_extension" {
@@ -166,6 +175,9 @@ resource "azurerm_virtual_machine_extension" "dc_extension" {
   SETTINGS
 }
 
+output "decoded_script" {
+  value = base64decode(local.addc_script_base64)
+}
 
 ######### filename: log_analytics_workspace.tf #########
 resource "azurerm_log_analytics_workspace" "main" {
@@ -182,6 +194,73 @@ resource "azurerm_log_analytics_workspace" "main" {
 
 
 ######### filename: storage.tf #########
+resource "random_integer" "st" {
+  min = 0000
+  max = 9999
+}
+
+resource "azurerm_storage_account" "main" {
+  name                     = "stmain${var.loc_short}${random_integer.st.result}"
+  resource_group_name      = azurerm_resource_group.main.name
+  location                 = var.loc
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+  account_kind             = "StorageV2"
+  access_tier              = "Hot"
+
+  https_traffic_only_enabled      = true
+  allow_nested_items_to_be_public = false
+  min_tls_version                 = "TLS1_2"
+
+  network_rules {
+    default_action             = "Deny"
+    bypass                     = ["AzureServices"]
+    ip_rules                   = []
+    virtual_network_subnet_ids = []
+  }
+}
+
+resource "azurerm_private_endpoint" "blob" {
+  name                = "pe-blob-stmain${var.loc_short}${random_integer.st.result}"
+  location            = var.loc
+  resource_group_name = azurerm_resource_group.main.name
+  subnet_id           = azurerm_subnet.subnets["vnet-main-${var.loc_short}-01/PrivateEndpointSubnet"].id
+
+  private_service_connection {
+    name                           = "psc-stmain${var.loc_short}${random_integer.st.result}"
+    private_connection_resource_id = azurerm_storage_account.main.id
+    is_manual_connection           = false
+    subresource_names              = ["blob"]
+  }
+
+  private_dns_zone_group {
+    name = "pdnsg-blob-stmain${var.loc_short}${random_integer.st.result}"
+    private_dns_zone_ids = [
+      azurerm_private_dns_zone.blob.id
+    ]
+  }
+}
+
+resource "azurerm_private_endpoint" "file" {
+  name                = "pe-file-stmain${var.loc_short}${random_integer.st.result}"
+  location            = var.loc
+  resource_group_name = azurerm_resource_group.main.name
+  subnet_id           = azurerm_subnet.subnets["vnet-main-${var.loc_short}-01/PrivateEndpointSubnet"].id
+
+  private_service_connection {
+    name                           = "psc-stmain${var.loc_short}${random_integer.st.result}"
+    private_connection_resource_id = azurerm_storage_account.main.id
+    is_manual_connection           = false
+    subresource_names              = ["file"]
+  }
+
+  private_dns_zone_group {
+    name = "pdnsg-file-stmain${var.loc_short}${random_integer.st.result}"
+    private_dns_zone_ids = [
+      azurerm_private_dns_zone.file.id
+    ]
+  }
+}
 
 
 ######### filename: firewall_policy.tf #########
@@ -189,22 +268,66 @@ resource "azurerm_firewall_policy" "primary" {
   name                = "afwp-hub-${var.loc_short}-01"
   resource_group_name = azurerm_resource_group.hub.name
   location            = var.loc
+  dns {
+    proxy_enabled = true
+    servers       = ["168.63.129.16"]
+  }
 }
 
-resource "azurerm_firewall_policy_rule_collection_group" "primary" {
-  name               = "Azure-Platform-RCG"
+resource "azurerm_firewall_policy_rule_collection_group" "default" {
+  name               = "Azure-Default-RCG"
   firewall_policy_id = azurerm_firewall_policy.primary.id
-  priority           = 100
+  priority           = 2000
 
   network_rule_collection {
-    name     = "Allow-Azure-Platform-Services-Network"
+    name     = "Allow-Internal-NRC"
+    priority = 1000
+    action   = "Allow"
+
+    rule {
+      name                  = "East-West"
+      description           = "Allow Any East-West traffic"
+      source_ip_groups      = [azurerm_ip_group.shared.id]
+      destination_ip_groups = [azurerm_ip_group.shared.id]
+      destination_ports     = ["*"]
+      protocols             = ["Any"]
+    }
+
+  }
+
+
+  network_rule_collection {
+    name     = "Allow-External-NRC"
+    priority = 2000
+    action   = "Allow"
+
+    rule {
+      name                  = "Internet"
+      description           = "Allow Any Internet"
+      source_ip_groups      = [azurerm_ip_group.shared.id]
+      destination_addresses = ["*"]
+      destination_ports     = ["*"]
+      protocols             = ["Any"]
+    }
+
+  }
+
+}
+
+resource "azurerm_firewall_policy_rule_collection_group" "platform" {
+  name               = "Azure-Platform-RCG"
+  firewall_policy_id = azurerm_firewall_policy.primary.id
+  priority           = 1000
+
+  network_rule_collection {
+    name     = "Allow-Azure-Platform-Services-NRC"
     priority = 1000
     action   = "Allow"
 
     rule {
       name                  = "KMS"
       description           = "Allow KMS (Windows Activation)"
-      source_addresses      = [var.address_space]
+      source_ip_groups      = [azurerm_ip_group.shared.id]
       destination_addresses = ["23.102.135.246", "20.118.99.224", "40.83.235.53"]
       destination_ports     = ["1688"]
       protocols             = ["TCP"]
@@ -213,25 +336,25 @@ resource "azurerm_firewall_policy_rule_collection_group" "primary" {
     rule {
       name                  = "Azure-WireServer"
       description           = "Azure platform resources"
-      source_addresses      = [var.address_space]
+      source_ip_groups      = [azurerm_ip_group.shared.id]
       destination_addresses = ["168.63.129.16"]
       destination_ports     = ["80", "32526"]
       protocols             = ["TCP"]
     }
 
     rule {
-      name                  = "Windows-Time"
-      description           = "Windows Time"
-      source_addresses      = [var.address_space]
-      destination_fqdns     = ["time.windows.com"]
-      destination_ports     = ["123"]
-      protocols             = ["UDP"]
+      name              = "Windows-Time"
+      description       = "Windows Time"
+      source_ip_groups  = [azurerm_ip_group.shared.id]
+      destination_fqdns = ["time.windows.com"]
+      destination_ports = ["123"]
+      protocols         = ["UDP"]
     }
 
     rule {
       name                  = "DNS-Inbound"
       description           = "Allow DNS Inbound"
-      source_addresses      = [var.address_space]
+      source_ip_groups      = [azurerm_ip_group.shared.id]
       destination_addresses = [azurerm_firewall.primary.ip_configuration.0.private_ip_address]
       destination_ports     = ["53"]
       protocols             = ["Any"]
@@ -249,16 +372,16 @@ resource "azurerm_firewall_policy_rule_collection_group" "primary" {
     rule {
       name                  = "Microsoft-Defender-For-Endpoint"
       description           = "Allow Microsoft Defender for Endpoint"
-      source_addresses      = [var.address_space]
+      source_ip_groups      = [azurerm_ip_group.shared.id]
       destination_addresses = ["MicrosoftDefenderForEndpoint"]
-      destination_ports     = ["80","443"]
+      destination_ports     = ["80", "443"]
       protocols             = ["Any"]
     }
 
     rule {
       name                  = "Microsoft-Entra-ID"
       description           = "Allow Microsoft Entra ID"
-      source_addresses      = [var.address_space]
+      source_ip_groups      = [azurerm_ip_group.shared.id]
       destination_addresses = ["AzureActiveDirectory"]
       destination_ports     = ["443"]
       protocols             = ["Any"]
@@ -267,25 +390,25 @@ resource "azurerm_firewall_policy_rule_collection_group" "primary" {
     rule {
       name                  = "Azure-Storage"
       description           = "Allow Azure Storage"
-      source_addresses      = [var.address_space]
+      source_ip_groups      = [azurerm_ip_group.shared.id]
       destination_addresses = ["Storage"]
       destination_ports     = ["443"]
       protocols             = ["Any"]
     }
- 
+
     rule {
       name                  = "Azure-Events-Hub"
       description           = "Allow Azure Events Hub"
-      source_addresses      = [var.address_space]
+      source_ip_groups      = [azurerm_ip_group.shared.id]
       destination_addresses = ["EventHub"]
       destination_ports     = ["443"]
       protocols             = ["Any"]
     }
- 
+
     rule {
       name                  = "Azure-Guest-And-Hybrid-Management"
       description           = "Allow Guest and Hybrid Management"
-      source_addresses      = [var.address_space]
+      source_ip_groups      = [azurerm_ip_group.shared.id]
       destination_addresses = ["GuestAndHybridManagement"]
       destination_ports     = ["443"]
       protocols             = ["Any"]
@@ -294,7 +417,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "primary" {
     rule {
       name                  = "Azure-Key-Vault"
       description           = "Allow Azure Key Vault"
-      source_addresses      = [var.address_space]
+      source_ip_groups      = [azurerm_ip_group.shared.id]
       destination_addresses = ["AzureKeyVault"]
       destination_ports     = ["443"]
       protocols             = ["Any"]
@@ -303,7 +426,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "primary" {
     rule {
       name                  = "Azure-Site-Recovery"
       description           = "Allow Azure Site Recovery"
-      source_addresses      = [var.address_space]
+      source_ip_groups      = [azurerm_ip_group.shared.id]
       destination_addresses = ["AzureSiteRecovery"]
       destination_ports     = ["443"]
       protocols             = ["Any"]
@@ -312,13 +435,13 @@ resource "azurerm_firewall_policy_rule_collection_group" "primary" {
   }
 
   application_rule_collection {
-    name     = "Allow-Azure-Platform-Services-Application"
-    priority = 1100
+    name     = "Allow-Azure-Platform-Services-ARC"
+    priority = 2000
     action   = "Allow"
 
     rule {
       name             = "Azure-Backup"
-      source_addresses = [var.address_space]
+      source_ip_groups = [azurerm_ip_group.shared.id]
       protocols {
         type = "Https"
         port = 443
@@ -328,7 +451,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "primary" {
 
     rule {
       name             = "Azure-Virtual-Desktop"
-      source_addresses = [var.address_space]
+      source_ip_groups = [azurerm_ip_group.shared.id]
       protocols {
         type = "Https"
         port = 443
@@ -338,7 +461,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "primary" {
 
     rule {
       name             = "Azure-Monitor-Agent"
-      source_addresses = [var.address_space]
+      source_ip_groups = [azurerm_ip_group.shared.id]
       protocols {
         type = "Https"
         port = 443
@@ -354,7 +477,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "primary" {
 
     rule {
       name             = "Windows-Update"
-      source_addresses = [var.address_space]
+      source_ip_groups = [azurerm_ip_group.shared.id]
       protocols {
         type = "Https"
         port = 443
@@ -364,7 +487,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "primary" {
 
     rule {
       name             = "Windows-Diagnostics"
-      source_addresses = [var.address_space]
+      source_ip_groups = [azurerm_ip_group.shared.id]
       protocols {
         type = "Https"
         port = 443
@@ -374,7 +497,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "primary" {
 
     rule {
       name             = "MAPS"
-      source_addresses = [var.address_space]
+      source_ip_groups = [azurerm_ip_group.shared.id]
       protocols {
         type = "Https"
         port = 443
@@ -384,7 +507,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "primary" {
 
     rule {
       name             = "Certificate-Authorities"
-      source_addresses = [var.address_space]
+      source_ip_groups = [azurerm_ip_group.shared.id]
       protocols {
         type = "Https"
         port = 443
@@ -467,6 +590,7 @@ resource "azurerm_virtual_network" "vnets" {
   address_space       = each.value.address_space
   location            = var.loc
   resource_group_name = each.value.resource_group
+  dns_servers         = each.value.dns_servers
 }
 
 # Create Subnets
@@ -510,6 +634,16 @@ resource "azurerm_virtual_network_peering" "spokes_to_hub" {
   use_remote_gateways          = false
 }
 
+resource "azurerm_ip_group" "shared" {
+  name                = "ipg-shared-${var.loc_short}-01"
+  location            = var.loc
+  resource_group_name = azurerm_resource_group.hub.name
+
+  cidrs = flatten([
+    for vnet_key, vnet in local.virtual_networks : vnet.address_space
+  ])
+}
+
 ######### filename: variables.tf #########
 variable "subscription_id" {
   description = "Azure subscription ID."
@@ -545,47 +679,66 @@ variable "active_directory_domain" {
   default     = "big.brain"
 }
 
-variable "address_space" {
-  description = "Address space for the environment."
-  type        = string
-  default     = "10.0.0.0/16"
+variable "create_bastion" {
+  description = "Create Azure Bastion."
+  type        = bool
+  default     = true
+}
+
+variable "enable_nsgs" {
+  description = "Enable or disable the creation of NSGs and their associations"
+  type        = bool
+  default     = false
 }
 
 ######### filename: virtual_machines.tf #########
 locals {
-  vms = [
-    {
-      name        = "vm-gen-${var.loc_short}-01"
-      vnet_name   = "vnet-main-${var.loc_short}-01"
-      subnet_name = "VM1Subnet"
-    },
-    {
-      name        = "vm-gen-${var.loc_short}-02"
-      vnet_name   = "vnet-main-${var.loc_short}-01"
-      subnet_name = "VM2Subnet"
-    },
-    {
-      name               = "vm-dc-${var.loc_short}-01"
+  windows_vms = {
+    "vm-dc-${var.loc_short}-01" = {
       vnet_name          = "vnet-adds-${var.loc_short}-01"
       subnet_name        = "ADDSSubnet"
       private_ip_address = local.domain_controller_ip
+      os                 = "WS22"
     },
-  ]
-}
-
-# Network Interfaces for VMs
-resource "azurerm_network_interface" "nics" {
-  for_each = {
-    for vm in local.vms :
-    vm.name => vm
+    "vm-ws22-${var.loc_short}-01" = {
+      vnet_name   = "vnet-main-${var.loc_short}-01"
+      subnet_name = "VM1Subnet"
+      os          = "WS22"
+    }
+  }
+  linux_vms = {
+    "vm-ubu24-${var.loc_short}-02" = {
+      vnet_name   = "vnet-main-${var.loc_short}-01"
+      subnet_name = "VM2Subnet"
+      os          = "UBU24"
+    }
   }
 
-  name                = "nic-${each.value.name}"
+  source_image_reference_library = {
+    WS22 = {
+      publisher = "MicrosoftWindowsServer"
+      offer     = "WindowsServer"
+      sku       = "2022-Datacenter"
+      version   = "latest"
+    }
+    UBU24 = {
+      publisher = "Canonical"
+      offer     = "ubuntu-24_04-lts"
+      sku       = "server"
+      version   = "latest"
+    }
+  }
+}
+
+resource "azurerm_network_interface" "nics" {
+  for_each = merge(local.windows_vms, local.linux_vms)
+
+  name                = "nic-${each.key}"
   location            = var.loc
   resource_group_name = local.virtual_networks[each.value.vnet_name].resource_group
 
   ip_configuration {
-    name                          = "ipconfig1"
+    name                          = "ipconfig"
     subnet_id                     = azurerm_subnet.subnets["${each.value.vnet_name}/${each.value.subnet_name}"].id
     private_ip_address_allocation = "Dynamic"
   }
@@ -593,15 +746,17 @@ resource "azurerm_network_interface" "nics" {
 
 # Virtual Machines
 resource "azurerm_windows_virtual_machine" "vms" {
-  for_each = azurerm_network_interface.nics
+  for_each = { for k, v in azurerm_network_interface.nics : k => v if contains(keys(local.windows_vms), k) }
 
-  name                  = each.key
-  resource_group_name   = each.value.resource_group_name
-  location              = var.loc
-  size                  = "Standard_B2ms"
-  admin_username        = var.admin_username
-  admin_password        = var.admin_password
-  network_interface_ids = [each.value.id]
+  name                              = each.key
+  resource_group_name               = local.virtual_networks[local.windows_vms[each.key].vnet_name].resource_group
+  location                          = var.loc
+  size                              = "Standard_B2ms"
+  admin_username                    = var.admin_username
+  admin_password                    = var.admin_password
+  network_interface_ids             = [each.value.id]
+  vm_agent_platform_updates_enabled = true
+  patch_mode                        = "AutomaticByPlatform"
 
   os_disk {
     name                 = "osdisk-${each.key}"
@@ -610,10 +765,45 @@ resource "azurerm_windows_virtual_machine" "vms" {
   }
 
   source_image_reference {
-    publisher = "MicrosoftWindowsServer"
-    offer     = "WindowsServer"
-    sku       = "2022-Datacenter"
-    version   = "latest"
+    publisher = local.source_image_reference_library[local.windows_vms[each.key].os].publisher
+    offer     = local.source_image_reference_library[local.windows_vms[each.key].os].offer
+    sku       = local.source_image_reference_library[local.windows_vms[each.key].os].sku
+    version   = local.source_image_reference_library[local.windows_vms[each.key].os].version
+  }
+
+  boot_diagnostics {
+    storage_account_uri = null
+  }
+}
+
+resource "azurerm_linux_virtual_machine" "vms" {
+  for_each = { for k, v in azurerm_network_interface.nics : k => v if contains(keys(local.linux_vms), k) }
+
+  name                              = each.key
+  resource_group_name               = local.virtual_networks[local.linux_vms[each.key].vnet_name].resource_group
+  location                          = var.loc
+  size                              = "Standard_B2ms"
+  disable_password_authentication   = false
+  admin_username                    = var.admin_username
+  admin_password                    = var.admin_password
+  network_interface_ids             = [each.value.id]
+  vm_agent_platform_updates_enabled = true
+
+  os_disk {
+    name                 = "osdisk-${each.key}"
+    caching              = "ReadWrite"
+    storage_account_type = "StandardSSD_LRS"
+  }
+
+  source_image_reference {
+    publisher = local.source_image_reference_library[local.linux_vms[each.key].os].publisher
+    offer     = local.source_image_reference_library[local.linux_vms[each.key].os].offer
+    sku       = local.source_image_reference_library[local.linux_vms[each.key].os].sku
+    version   = local.source_image_reference_library[local.linux_vms[each.key].os].version
+  }
+
+  boot_diagnostics {
+    storage_account_uri = null
   }
 }
 
@@ -655,15 +845,35 @@ resource "azurerm_monitor_diagnostic_setting" "firewall_diagnostic" {
   enabled_log {
     category_group = "allLogs"
   }
-
-  enabled_log {
-    category = "allMetrics"
-  }
 }
 
 
 ######### filename: dns.tf #########
+resource "azurerm_private_dns_zone" "blob" {
+  name                = "privatelink.blob.core.windows.net"
+  resource_group_name = azurerm_resource_group.hub.name
+}
 
+resource "azurerm_private_dns_zone" "file" {
+  name                = "privatelink.file.core.windows.net"
+  resource_group_name = azurerm_resource_group.hub.name
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "blob_link" {
+  name                  = "blob-hub-vnet-link"
+  resource_group_name   = azurerm_resource_group.hub.name
+  private_dns_zone_name = azurerm_private_dns_zone.blob.name
+  virtual_network_id    = azurerm_virtual_network.vnets["vnet-hub-${var.loc_short}-01"].id
+  registration_enabled  = false
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "file_link" {
+  name                  = "file-hub-vnet-link"
+  resource_group_name   = azurerm_resource_group.hub.name
+  private_dns_zone_name = azurerm_private_dns_zone.file.name
+  virtual_network_id    = azurerm_virtual_network.vnets["vnet-hub-${var.loc_short}-01"].id
+  registration_enabled  = false
+}
 
 ######### filename: provider.tf #########
 terraform {
@@ -681,6 +891,28 @@ provider "azurerm" {
 }
 
 
+######### filename: nsgs.tf #########
+# Create NSGs for each subnet except the excluded ones
+resource "azurerm_network_security_group" "nsgs" {
+  for_each = var.enable_nsgs ? {
+    for subnet in local.subnets :
+    subnet.key => subnet
+    if !contains(["AzureFirewallSubnet", "AzureBastionSubnet", "GatewaySubnet"], subnet.subnet_name)
+  } : {}
+
+  name                = "${each.value.subnet_name}-nsg"
+  location            = var.loc
+  resource_group_name = each.value.resource_group
+}
+
+# Associate NSGs with their corresponding subnets, excluding the specified subnets
+resource "azurerm_subnet_network_security_group_association" "nsg_association" {
+  for_each = var.enable_nsgs ? azurerm_network_security_group.nsgs : {}
+
+  subnet_id                 = azurerm_subnet.subnets[each.key].id
+  network_security_group_id = each.value.id
+}
+
 ######### filename: bastion.tf #########
 # Public IP for Azure Bastion
 resource "azurerm_public_ip" "bastion_pip" {
@@ -693,6 +925,7 @@ resource "azurerm_public_ip" "bastion_pip" {
 
 # Azure Bastion Host
 resource "azurerm_bastion_host" "bastion" {
+  count               = var.create_bastion ? 1 : 0
   name                = "bastion-hub-${var.loc_short}-01"
   location            = var.loc
   resource_group_name = azurerm_resource_group.hub.name
@@ -741,7 +974,6 @@ resource "azurerm_resource_group" "mgmt" {
 ######### Other files and directories #########
 terraform.tfstate.backup
 terraform.tfstate
-.terraform.tfstate.lock.info
 terraform.tfvars
 .terraform/
 .git/
