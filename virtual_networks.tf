@@ -53,6 +53,7 @@ resource "azurerm_virtual_network" "vnets" {
   address_space       = each.value.address_space
   location            = var.loc
   resource_group_name = each.value.resource_group
+  dns_servers         = each.value.dns_servers
 }
 
 # Create Subnets
