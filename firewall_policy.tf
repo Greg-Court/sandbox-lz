@@ -14,35 +14,38 @@ resource "azurerm_firewall_policy_rule_collection_group" "default" {
   priority           = 2000
 
   network_rule_collection {
-    name     = "Deny-Default"
+    name     = "Allow-Internal-NRC"
     priority = 1000
-    action   = "Deny"
-
-    rule {
-      name                  = "Deny-Test"
-      description           = "Deny Test"
-      source_addresses      = ["10.10.10.10"]
-      destination_addresses = ["10.10.10.10"]
-      destination_ports     = ["123"]
-      protocols             = ["UDP"]
-    }
-  }
-
-  network_rule_collection {
-    name     = "Allow-Default"
-    priority = 1100
     action   = "Allow"
 
     rule {
-      name                  = "Allow-Test"
-      description           = "Allow Test"
-      source_addresses      = ["10.10.10.10"]
-      destination_addresses = ["10.10.10.10"]
-      destination_ports     = ["123"]
-      protocols             = ["UDP"]
+      name                  = "East-West"
+      description           = "Allow Any East-West traffic"
+      source_ip_groups      = [azurerm_ip_group.shared.id]
+      destination_ip_groups = [azurerm_ip_group.shared.id]
+      destination_ports     = ["*"]
+      protocols             = ["Any"]
     }
 
   }
+
+
+  network_rule_collection {
+    name     = "Allow-External-NRC"
+    priority = 2000
+    action   = "Allow"
+
+    rule {
+      name                  = "Internet"
+      description           = "Allow Any Internet"
+      source_ip_groups      = [azurerm_ip_group.shared.id]
+      destination_addresses = ["*"]
+      destination_ports     = ["*"]
+      protocols             = ["Any"]
+    }
+
+  }
+
 }
 
 resource "azurerm_firewall_policy_rule_collection_group" "platform" {
@@ -51,14 +54,14 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
   priority           = 1000
 
   network_rule_collection {
-    name     = "Allow-Azure-Platform-Services-Network"
+    name     = "Allow-Azure-Platform-Services-NRC"
     priority = 1000
     action   = "Allow"
 
     rule {
       name                  = "KMS"
       description           = "Allow KMS (Windows Activation)"
-      source_addresses      = [var.address_space]
+      source_ip_groups      = [azurerm_ip_group.shared.id]
       destination_addresses = ["23.102.135.246", "20.118.99.224", "40.83.235.53"]
       destination_ports     = ["1688"]
       protocols             = ["TCP"]
@@ -67,7 +70,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
     rule {
       name                  = "Azure-WireServer"
       description           = "Azure platform resources"
-      source_addresses      = [var.address_space]
+      source_ip_groups      = [azurerm_ip_group.shared.id]
       destination_addresses = ["168.63.129.16"]
       destination_ports     = ["80", "32526"]
       protocols             = ["TCP"]
@@ -76,7 +79,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
     rule {
       name              = "Windows-Time"
       description       = "Windows Time"
-      source_addresses  = [var.address_space]
+      source_ip_groups  = [azurerm_ip_group.shared.id]
       destination_fqdns = ["time.windows.com"]
       destination_ports = ["123"]
       protocols         = ["UDP"]
@@ -85,7 +88,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
     rule {
       name                  = "DNS-Inbound"
       description           = "Allow DNS Inbound"
-      source_addresses      = [var.address_space]
+      source_ip_groups      = [azurerm_ip_group.shared.id]
       destination_addresses = [azurerm_firewall.primary.ip_configuration.0.private_ip_address]
       destination_ports     = ["53"]
       protocols             = ["Any"]
@@ -103,7 +106,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
     rule {
       name                  = "Microsoft-Defender-For-Endpoint"
       description           = "Allow Microsoft Defender for Endpoint"
-      source_addresses      = [var.address_space]
+      source_ip_groups      = [azurerm_ip_group.shared.id]
       destination_addresses = ["MicrosoftDefenderForEndpoint"]
       destination_ports     = ["80", "443"]
       protocols             = ["Any"]
@@ -112,7 +115,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
     rule {
       name                  = "Microsoft-Entra-ID"
       description           = "Allow Microsoft Entra ID"
-      source_addresses      = [var.address_space]
+      source_ip_groups      = [azurerm_ip_group.shared.id]
       destination_addresses = ["AzureActiveDirectory"]
       destination_ports     = ["443"]
       protocols             = ["Any"]
@@ -121,7 +124,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
     rule {
       name                  = "Azure-Storage"
       description           = "Allow Azure Storage"
-      source_addresses      = [var.address_space]
+      source_ip_groups      = [azurerm_ip_group.shared.id]
       destination_addresses = ["Storage"]
       destination_ports     = ["443"]
       protocols             = ["Any"]
@@ -130,7 +133,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
     rule {
       name                  = "Azure-Events-Hub"
       description           = "Allow Azure Events Hub"
-      source_addresses      = [var.address_space]
+      source_ip_groups      = [azurerm_ip_group.shared.id]
       destination_addresses = ["EventHub"]
       destination_ports     = ["443"]
       protocols             = ["Any"]
@@ -139,7 +142,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
     rule {
       name                  = "Azure-Guest-And-Hybrid-Management"
       description           = "Allow Guest and Hybrid Management"
-      source_addresses      = [var.address_space]
+      source_ip_groups      = [azurerm_ip_group.shared.id]
       destination_addresses = ["GuestAndHybridManagement"]
       destination_ports     = ["443"]
       protocols             = ["Any"]
@@ -148,7 +151,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
     rule {
       name                  = "Azure-Key-Vault"
       description           = "Allow Azure Key Vault"
-      source_addresses      = [var.address_space]
+      source_ip_groups      = [azurerm_ip_group.shared.id]
       destination_addresses = ["AzureKeyVault"]
       destination_ports     = ["443"]
       protocols             = ["Any"]
@@ -157,7 +160,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
     rule {
       name                  = "Azure-Site-Recovery"
       description           = "Allow Azure Site Recovery"
-      source_addresses      = [var.address_space]
+      source_ip_groups      = [azurerm_ip_group.shared.id]
       destination_addresses = ["AzureSiteRecovery"]
       destination_ports     = ["443"]
       protocols             = ["Any"]
@@ -166,13 +169,13 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
   }
 
   application_rule_collection {
-    name     = "Allow-Azure-Platform-Services-Application"
-    priority = 1100
+    name     = "Allow-Azure-Platform-Services-ARC"
+    priority = 2000
     action   = "Allow"
 
     rule {
       name             = "Azure-Backup"
-      source_addresses = [var.address_space]
+      source_ip_groups = [azurerm_ip_group.shared.id]
       protocols {
         type = "Https"
         port = 443
@@ -182,7 +185,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
 
     rule {
       name             = "Azure-Virtual-Desktop"
-      source_addresses = [var.address_space]
+      source_ip_groups = [azurerm_ip_group.shared.id]
       protocols {
         type = "Https"
         port = 443
@@ -192,7 +195,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
 
     rule {
       name             = "Azure-Monitor-Agent"
-      source_addresses = [var.address_space]
+      source_ip_groups = [azurerm_ip_group.shared.id]
       protocols {
         type = "Https"
         port = 443
@@ -208,7 +211,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
 
     rule {
       name             = "Windows-Update"
-      source_addresses = [var.address_space]
+      source_ip_groups = [azurerm_ip_group.shared.id]
       protocols {
         type = "Https"
         port = 443
@@ -218,7 +221,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
 
     rule {
       name             = "Windows-Diagnostics"
-      source_addresses = [var.address_space]
+      source_ip_groups = [azurerm_ip_group.shared.id]
       protocols {
         type = "Https"
         port = 443
@@ -228,7 +231,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
 
     rule {
       name             = "MAPS"
-      source_addresses = [var.address_space]
+      source_ip_groups = [azurerm_ip_group.shared.id]
       protocols {
         type = "Https"
         port = 443
@@ -238,7 +241,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
 
     rule {
       name             = "Certificate-Authorities"
-      source_addresses = [var.address_space]
+      source_ip_groups = [azurerm_ip_group.shared.id]
       protocols {
         type = "Https"
         port = 443

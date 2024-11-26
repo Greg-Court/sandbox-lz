@@ -76,6 +76,10 @@ resource "azurerm_windows_virtual_machine" "vms" {
     sku       = local.source_image_reference_library[local.windows_vms[each.key].os].sku
     version   = local.source_image_reference_library[local.windows_vms[each.key].os].version
   }
+
+  boot_diagnostics {
+    storage_account_uri = null
+  }
 }
 
 resource "azurerm_linux_virtual_machine" "vms" {
@@ -102,5 +106,9 @@ resource "azurerm_linux_virtual_machine" "vms" {
     offer     = local.source_image_reference_library[local.linux_vms[each.key].os].offer
     sku       = local.source_image_reference_library[local.linux_vms[each.key].os].sku
     version   = local.source_image_reference_library[local.linux_vms[each.key].os].version
+  }
+
+  boot_diagnostics {
+    storage_account_uri = null
   }
 }

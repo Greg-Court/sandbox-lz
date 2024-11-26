@@ -9,6 +9,3 @@ Install-ADDSForest -DomainName '${active_directory_domain}' -InstallDns -SafeMod
 
 # Add a DNS forwarder to firewall IP
 Add-DnsServerForwarder -IPAddress '${firewall_private_ip}'
-
-# Remove default DNS forwarder
-Remove-DnsServerForwarder -IPAddress '168.63.129.16' # this is not working

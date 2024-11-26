@@ -95,3 +95,13 @@ resource "azurerm_virtual_network_peering" "spokes_to_hub" {
   allow_gateway_transit        = false
   use_remote_gateways          = false
 }
+
+resource "azurerm_ip_group" "shared" {
+  name                = "ipg-shared-${var.loc_short}-01"
+  location            = var.loc
+  resource_group_name = azurerm_resource_group.hub.name
+
+  cidrs = flatten([
+    for vnet_key, vnet in local.virtual_networks : vnet.address_space
+  ])
+}

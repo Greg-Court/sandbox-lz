@@ -32,14 +32,14 @@ variable "active_directory_domain" {
   default     = "big.brain"
 }
 
-variable "address_space" {
-  description = "Address space for the environment."
-  type        = string
-  default     = "10.0.0.0/16"
-}
-
 variable "create_bastion" {
   description = "Create Azure Bastion."
   type        = bool
   default     = true
+}
+
+variable "enable_nsgs" {
+  description = "Enable or disable the creation of NSGs and their associations"
+  type        = bool
+  default     = false
 }
