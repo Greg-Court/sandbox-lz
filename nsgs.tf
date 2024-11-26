@@ -1,4 +1,4 @@
-# Create NSGs for each subnet except the excluded ones
+# Create NSGs for all subnets except the excluded ones
 resource "azurerm_network_security_group" "nsgs" {
   for_each = var.enable_nsgs ? {
     for subnet in local.subnets :
@@ -6,7 +6,7 @@ resource "azurerm_network_security_group" "nsgs" {
     if !contains(["AzureFirewallSubnet", "AzureBastionSubnet", "GatewaySubnet"], subnet.subnet_name)
   } : {}
 
-  name                = "${each.value.subnet_name}-nsg"
+  name                = "nsg-${each.value.vnet_name}_${each.value.subnet_name}"
   location            = var.loc
   resource_group_name = each.value.resource_group
 }

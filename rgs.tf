@@ -1,5 +1,5 @@
 resource "azurerm_resource_group" "hub" {
-  name     = ""rg-hub-${var.loc_short}-01""
+  name     = "rg-hub-${var.loc_short}-01"
   location = var.loc
 }
 

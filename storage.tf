@@ -1,6 +1,10 @@
 resource "random_integer" "st" {
-  min = 0000
-  max = 9999
+  min = 00
+  max = 99
+}
+
+data "http" "my_public_ip" {
+  url = "https://api.ipify.org?format=text"
 }
 
 resource "azurerm_storage_account" "main" {
@@ -19,9 +23,21 @@ resource "azurerm_storage_account" "main" {
   network_rules {
     default_action             = "Deny"
     bypass                     = ["AzureServices"]
-    ip_rules                   = []
+    ip_rules                   = [data.http.my_public_ip.response_body]
     virtual_network_subnet_ids = []
   }
+}
+
+resource "azurerm_storage_container" "test" {
+  name                  = "test"
+  storage_account_id    = azurerm_storage_account.main.id
+  container_access_type = "private"
+}
+
+resource "azurerm_storage_share" "test" {
+  name                 = "test"
+  storage_account_id    = azurerm_storage_account.main.id
+  quota                = 100
 }
 
 resource "azurerm_private_endpoint" "blob" {

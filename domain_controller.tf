@@ -22,6 +22,6 @@ resource "azurerm_virtual_machine_extension" "dc_extension" {
   SETTINGS
 }
 
-output "decoded_script" {
-  value = base64decode(local.addc_script_base64)
-}
+# output "decoded_script" {
+#   value = base64decode(local.addc_script_base64)
+# }
