@@ -1,6 +1,6 @@
 locals {
   route_tables = {
-    "rt-hub-${var.loc_short}-01" = {
+    "rt-hub-gateway-${var.loc_short}-01" = {
       resource_group_name = azurerm_resource_group.hub.name
       routes = [
         {
@@ -20,6 +20,34 @@ locals {
         {
           vnet_name   = "vnet-hub-${var.loc_short}-01"
           subnet_name = "GatewaySubnet"
+        },
+      ]
+    }
+    "rt-hub-firewall-${var.loc_short}-01" = {
+      resource_group_name = azurerm_resource_group.hub.name
+      routes = [
+        {
+          name                   = "Internet-Out"
+          address_prefix         = "0.0.0.0/0"
+          next_hop_type          = "Internet"
+        },
+        {
+          name                   = "UKW-to-UKWFirewall"
+          address_prefix         = "100.0.0.0/16"
+          next_hop_type          = "VirtualAppliance"
+          next_hop_in_ip_address = "100.0.0.4"
+        },
+        {
+          name                   = "UKWADDS-to-UKWFirewall"
+          address_prefix         = "100.1.0.0/24"
+          next_hop_type          = "VirtualAppliance"
+          next_hop_in_ip_address = "100.0.0.4"
+        },
+      ]
+      associations = [
+        {
+          vnet_name   = "vnet-hub-${var.loc_short}-01"
+          subnet_name = "AzureFirewallSubnet"
         },
       ]
     }
@@ -116,7 +144,7 @@ resource "azurerm_route" "routes" {
   route_table_name       = azurerm_route_table.route_tables[each.value.route_table_name].name
   address_prefix         = each.value.address_prefix
   next_hop_type          = each.value.next_hop_type
-  next_hop_in_ip_address = each.value.next_hop_in_ip_address
+  next_hop_in_ip_address = contains(keys(each.value), "next_hop_in_ip_address") ? each.value.next_hop_in_ip_address : null
 }
 
 resource "azurerm_subnet_route_table_association" "associations" {

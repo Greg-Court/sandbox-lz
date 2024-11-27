@@ -175,9 +175,9 @@ resource "azurerm_virtual_machine_extension" "dc_extension" {
   SETTINGS
 }
 
-output "decoded_script" {
-  value = base64decode(local.addc_script_base64)
-}
+# output "decoded_script" {
+#   value = base64decode(local.addc_script_base64)
+# }
 
 ######### filename: log_analytics_workspace.tf #########
 resource "azurerm_log_analytics_workspace" "main" {
@@ -195,8 +195,12 @@ resource "azurerm_log_analytics_workspace" "main" {
 
 ######### filename: storage.tf #########
 resource "random_integer" "st" {
-  min = 0000
-  max = 9999
+  min = 00
+  max = 99
+}
+
+data "http" "my_public_ip" {
+  url = "https://api.ipify.org?format=text"
 }
 
 resource "azurerm_storage_account" "main" {
@@ -215,9 +219,21 @@ resource "azurerm_storage_account" "main" {
   network_rules {
     default_action             = "Deny"
     bypass                     = ["AzureServices"]
-    ip_rules                   = []
+    ip_rules                   = [data.http.my_public_ip.response_body]
     virtual_network_subnet_ids = []
   }
+}
+
+resource "azurerm_storage_container" "test" {
+  name                  = "test"
+  storage_account_id    = azurerm_storage_account.main.id
+  container_access_type = "private"
+}
+
+resource "azurerm_storage_share" "test" {
+  name                 = "test"
+  storage_account_id    = azurerm_storage_account.main.id
+  quota                = 100
 }
 
 resource "azurerm_private_endpoint" "blob" {
@@ -688,7 +704,7 @@ variable "create_bastion" {
 variable "enable_nsgs" {
   description = "Enable or disable the creation of NSGs and their associations"
   type        = bool
-  default     = false
+  default     = true
 }
 
 ######### filename: virtual_machines.tf #########
@@ -892,7 +908,7 @@ provider "azurerm" {
 
 
 ######### filename: nsgs.tf #########
-# Create NSGs for each subnet except the excluded ones
+# Create NSGs for all subnets except the excluded ones
 resource "azurerm_network_security_group" "nsgs" {
   for_each = var.enable_nsgs ? {
     for subnet in local.subnets :
@@ -900,7 +916,7 @@ resource "azurerm_network_security_group" "nsgs" {
     if !contains(["AzureFirewallSubnet", "AzureBastionSubnet", "GatewaySubnet"], subnet.subnet_name)
   } : {}
 
-  name                = "${each.value.subnet_name}-nsg"
+  name                = "nsg-${each.value.vnet_name}_${each.value.subnet_name}"
   location            = var.loc
   resource_group_name = each.value.resource_group
 }
@@ -941,35 +957,51 @@ resource "azurerm_bastion_host" "bastion" {
 
 
 ######### filename: rgs.tf #########
-locals {
-  resource_group_names = {
-    hub      = "rg-hub-${var.loc_short}-01"
-    identity = "rg-adds-${var.loc_short}-01"
-    main     = "rg-main-${var.loc_short}-01"
-    mgmt     = "rg-mgmt-${var.loc_short}-01"
-  }
-}
-
 resource "azurerm_resource_group" "hub" {
-  name     = local.resource_group_names.hub
+  name     = "rg-hub-${var.loc_short}-01"
   location = var.loc
 }
 
 resource "azurerm_resource_group" "identity" {
-  name     = local.resource_group_names.identity
+  name     = "rg-adds-${var.loc_short}-01"
   location = var.loc
 }
 
 resource "azurerm_resource_group" "main" {
-  name     = local.resource_group_names.main
+  name     = "rg-main-${var.loc_short}-01"
   location = var.loc
 }
 
 resource "azurerm_resource_group" "mgmt" {
-  name     = local.resource_group_names.mgmt
+  name     = "rg-mgmt-${var.loc_short}-01"
   location = var.loc
 }
 
+
+# # To implement later:
+# locals {
+#   resource_groups = {
+#     hub = {
+#       name = "rg-hub-${var.loc_short}-01"
+#     }
+#     identity = {
+#       name = "rg-adds-${var.loc_short}-01"
+#     }
+#     main = {
+#       name = "rg-main-${var.loc_short}-01"
+#     }
+#     mgmt = {
+#       name = "rg-mgmt-${var.loc_short}-01"
+#     }
+#   }
+# }
+
+# resource "azurerm_resource_group" "rgs" {
+#   for_each = local.resource_groups
+
+#   name     = each.value.name
+#   location = var.loc
+# }
 
 ######### Other files and directories #########
 terraform.tfstate.backup

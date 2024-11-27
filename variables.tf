@@ -41,5 +41,5 @@ variable "create_bastion" {
 variable "enable_nsgs" {
   description = "Enable or disable the creation of NSGs and their associations"
   type        = bool
-  default     = false
+  default     = true
 }

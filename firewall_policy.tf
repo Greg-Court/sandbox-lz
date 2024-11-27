@@ -27,6 +27,15 @@ resource "azurerm_firewall_policy_rule_collection_group" "default" {
       protocols             = ["Any"]
     }
 
+    rule {
+      name                  = "Any-Any"
+      description           = "Allow Any Any traffic"
+      source_addresses      = ["10.0.0.0/8"]
+      destination_addresses = ["10.0.0.0/8"]
+      destination_ports     = ["*"]
+      protocols             = ["Any"]
+    }
+
   }
 
 
