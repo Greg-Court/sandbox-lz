@@ -27,11 +27,29 @@ resource "azurerm_firewall_policy_rule_collection_group" "default" {
       protocols             = ["Any"]
     }
 
+    # rule {
+    #   name                  = "Any-Any"
+    #   description           = "Allow Any Any traffic"
+    #   source_addresses      = ["10.0.0.0/8"]
+    #   destination_addresses = ["10.0.0.0/8"]
+    #   destination_ports     = ["*"]
+    #   protocols             = ["Any"]
+    # }
+
     rule {
-      name                  = "Any-Any"
-      description           = "Allow Any Any traffic"
-      source_addresses      = ["10.0.0.0/8"]
-      destination_addresses = ["10.0.0.0/8"]
+      name                  = "Onprem-Azure"
+      description           = "Allow on-prem to Azure"
+      source_addresses      = var.lng_address_space
+      destination_ip_groups = [azurerm_ip_group.shared.id]
+      destination_ports     = ["*"]
+      protocols             = ["Any"]
+    }
+
+    rule {
+      name                  = "Azure-Onprem"
+      description           = "Allow Azure to on-prem"
+      source_ip_groups      = [azurerm_ip_group.shared.id]
+      destination_addresses = var.lng_address_space
       destination_ports     = ["*"]
       protocols             = ["Any"]
     }

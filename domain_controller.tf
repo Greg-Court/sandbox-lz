@@ -1,5 +1,5 @@
 locals {
-  domain_controller_ip = "10.1.0.4"
+  domain_controller_ip = "10.0.16.4"
   addc_script_base64 = base64encode(templatefile("${path.module}/addc_script.ps1", {
     username                = var.admin_username,
     password                = var.admin_password,

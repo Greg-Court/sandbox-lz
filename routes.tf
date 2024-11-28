@@ -32,21 +32,33 @@ locals {
           next_hop_type          = "Internet"
         },
         {
-          name                   = "UKW-to-UKWFirewall"
-          address_prefix         = "100.0.0.0/16"
+          name                  = "UKW-to-UKWFirewall"
+          address_prefix         = "10.100.0.0/16"
           next_hop_type          = "VirtualAppliance"
-          next_hop_in_ip_address = "100.0.0.4"
+          next_hop_in_ip_address = "10.100.0.4"
         },
-        {
-          name                   = "UKWADDS-to-UKWFirewall"
-          address_prefix         = "100.1.0.0/24"
-          next_hop_type          = "VirtualAppliance"
-          next_hop_in_ip_address = "100.0.0.4"
-        },
+        # {
+        #   name                   = "UKWHub-to-UKWFirewall"
+        #   address_prefix         = "10.100.0.0/20"
+        #   next_hop_type          = "VirtualAppliance"
+        #   next_hop_in_ip_address = "10.100.0.4"
+        # },
+        # {
+        #   name                   = "UKWADDS-to-UKWFirewall"
+        #   address_prefix         = "10.100.16.0/20"
+        #   next_hop_type          = "VirtualAppliance"
+        #   next_hop_in_ip_address = "10.100.0.4"
+        # },
+        # {
+        #   name                   = "UKWMain-to-UKWFirewall"
+        #   address_prefix         = "10.100.32.0/20"
+        #   next_hop_type          = "VirtualAppliance"
+        #   next_hop_in_ip_address = "10.100.0.4"
+        # },
       ]
       associations = [
         {
-          vnet_name   = "vnet-hub-${var.loc_short}-01"
+          vnet_name   = azurerm_virtual_network.vnets["vnet-hub-${var.loc_short}-01"].name
           subnet_name = "AzureFirewallSubnet"
         },
       ]

@@ -43,3 +43,21 @@ variable "enable_nsgs" {
   type        = bool
   default     = true
 }
+
+variable "create_vng" {
+  description = "Enable or disable the creation of a Virtual Network Gateway."
+  type        = bool
+  default     = false
+}
+
+variable "vpn_psk" {
+  description = "Pre-shared key for the VPN connection."
+  type        = string
+  default     = ""
+}
+
+variable "lng_address_space" {
+  description = "Address space for the Local Network Gateway."
+  type        = list(string)
+  default     = ["192.168.0.0/16"]
+}

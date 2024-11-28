@@ -12,22 +12,22 @@ locals {
       }
     }
     "vnet-adds-${var.loc_short}-01" = {
-      address_space  = ["10.1.0.0/20"]
+      address_space  = ["10.0.16.0/20"]
       resource_group = azurerm_resource_group.identity.name
       dns_servers    = [local.domain_controller_ip]
       subnets = {
-        "ADDSSubnet"            = { address_prefix = "10.1.0.0/24" }
-        "PrivateEndpointSubnet" = { address_prefix = "10.1.15.0/24" }
+        "ADDSSubnet"            = { address_prefix = "10.0.16.0/24" }
+        "PrivateEndpointSubnet" = { address_prefix = "10.0.31.0/24" }
       }
     }
     "vnet-main-${var.loc_short}-01" = {
-      address_space  = ["10.2.0.0/20"]
+      address_space  = ["10.0.32.0/20"]
       resource_group = azurerm_resource_group.main.name
       dns_servers    = [local.domain_controller_ip]
       subnets = {
-        "VM1Subnet"             = { address_prefix = "10.2.0.0/24" }
-        "VM2Subnet"             = { address_prefix = "10.2.1.0/24" }
-        "PrivateEndpointSubnet" = { address_prefix = "10.2.15.0/24" }
+        "VM1Subnet"             = { address_prefix = "10.0.32.0/24" }
+        "VM2Subnet"             = { address_prefix = "10.0.33.0/24" }
+        "PrivateEndpointSubnet" = { address_prefix = "10.0.47.0/24" }
       }
     }
   }

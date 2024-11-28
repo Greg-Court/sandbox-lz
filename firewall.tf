@@ -31,7 +31,13 @@ resource "azurerm_monitor_diagnostic_setting" "firewall_diagnostic" {
 
   log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
 
+  log_analytics_destination_type = "Dedicated"
+
   enabled_log {
     category_group = "allLogs"
+  }
+
+  metric {
+    category = "AllMetrics"
   }
 }
