@@ -3,7 +3,7 @@ resource "azurerm_network_security_group" "nsgs" {
   for_each = var.enable_nsgs ? {
     for subnet in local.subnets :
     subnet.key => subnet
-    if !contains(["AzureFirewallSubnet", "AzureBastionSubnet", "GatewaySubnet"], subnet.subnet_name)
+    if !contains(["AzureFirewallSubnet", "AzureBastionSubnet", "GatewaySubnet", "AppGatewaySubnet"], subnet.subnet_name)
   } : {}
 
   name                = "nsg-${each.value.vnet_name}_${each.value.subnet_name}"

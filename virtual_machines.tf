@@ -8,14 +8,14 @@ locals {
     },
     "vm-ws22-${var.loc_short}-01" = {
       vnet_name   = "vnet-main-${var.loc_short}-01"
-      subnet_name = "VM1Subnet"
+      subnet_name = "WindowsSubnet"
       os          = "WS22"
     }
   }
   linux_vms = {
-    "vm-ubu24-${var.loc_short}-02" = {
+    "vm-ubu24-${var.loc_short}-01" = {
       vnet_name   = "vnet-main-${var.loc_short}-01"
-      subnet_name = "VM2Subnet"
+      subnet_name = "LinuxSubnet"
       os          = "UBU24"
     }
   }

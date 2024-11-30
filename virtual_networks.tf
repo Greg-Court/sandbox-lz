@@ -8,6 +8,7 @@ locals {
         "AzureFirewallSubnet"   = { address_prefix = "10.0.0.0/24" }
         "AzureBastionSubnet"    = { address_prefix = "10.0.1.0/24" }
         "GatewaySubnet"         = { address_prefix = "10.0.2.0/24" }
+        "AppGatewaySubnet"      = { address_prefix = "10.0.3.0/24" }
         "PrivateEndpointSubnet" = { address_prefix = "10.0.15.0/24" }
       }
     }
@@ -25,8 +26,8 @@ locals {
       resource_group = azurerm_resource_group.main.name
       dns_servers    = [local.domain_controller_ip]
       subnets = {
-        "VM1Subnet"             = { address_prefix = "10.0.32.0/24" }
-        "VM2Subnet"             = { address_prefix = "10.0.33.0/24" }
+        "WindowsSubnet"         = { address_prefix = "10.0.32.0/24" }
+        "LinuxSubnet"           = { address_prefix = "10.0.33.0/24" }
         "PrivateEndpointSubnet" = { address_prefix = "10.0.47.0/24" }
       }
     }

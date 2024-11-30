@@ -47,31 +47,13 @@ locals {
       resource_group_name = azurerm_resource_group.hub.name
       routes = [
         {
-          name                   = "Internet-Out"
-          address_prefix         = "0.0.0.0/0"
-          next_hop_type          = "Internet"
-        },
-        {
-          name                  = "UKW-to-UKWFirewall"
-          address_prefix         = "10.100.0.0/16"
-          next_hop_type          = "VirtualAppliance"
-          next_hop_in_ip_address = "10.100.0.4"
+          name           = "Internet-Out"
+          address_prefix = "0.0.0.0/0"
+          next_hop_type  = "Internet"
         },
         # {
-        #   name                   = "UKWHub-to-UKWFirewall"
-        #   address_prefix         = "10.100.0.0/20"
-        #   next_hop_type          = "VirtualAppliance"
-        #   next_hop_in_ip_address = "10.100.0.4"
-        # },
-        # {
-        #   name                   = "UKWADDS-to-UKWFirewall"
-        #   address_prefix         = "10.100.16.0/20"
-        #   next_hop_type          = "VirtualAppliance"
-        #   next_hop_in_ip_address = "10.100.0.4"
-        # },
-        # {
-        #   name                   = "UKWMain-to-UKWFirewall"
-        #   address_prefix         = "10.100.32.0/20"
+        #   name                   = "UKW-to-UKWFirewall"
+        #   address_prefix         = "10.100.0.0/16"
         #   next_hop_type          = "VirtualAppliance"
         #   next_hop_in_ip_address = "10.100.0.4"
         # },
@@ -98,6 +80,12 @@ locals {
           next_hop_type          = "VirtualAppliance"
           next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
         },
+        {
+          name                   = "AppGatewaySubnet-to-Firewall"
+          address_prefix         = azurerm_subnet.subnets["vnet-hub-${var.loc_short}-01/AppGatewaySubnet"].address_prefixes[0]
+          next_hop_type          = "VirtualAppliance"
+          next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
+        },
       ]
       associations = [
         {
@@ -121,15 +109,38 @@ locals {
           next_hop_type          = "VirtualAppliance"
           next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
         },
+        {
+          name                   = "AppGatewaySubnet-to-Firewall"
+          address_prefix         = azurerm_subnet.subnets["vnet-hub-${var.loc_short}-01/AppGatewaySubnet"].address_prefixes[0]
+          next_hop_type          = "VirtualAppliance"
+          next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
+        },
       ]
       associations = [
         {
           vnet_name   = "vnet-main-${var.loc_short}-01"
-          subnet_name = "VM1Subnet"
+          subnet_name = "WindowsSubnet"
         },
         {
           vnet_name   = "vnet-main-${var.loc_short}-01"
-          subnet_name = "VM2Subnet"
+          subnet_name = "LinuxSubnet"
+        }
+      ]
+    }
+    "rt-hub-appgw-${var.loc_short}-01" = {
+      resource_group_name = azurerm_resource_group.hub.name
+      routes = [
+        {
+          name                   = "BackendVMSubnet-to-Firewall"
+          address_prefix         = azurerm_subnet.subnets["vnet-main-${var.loc_short}-01/WindowsSubnet"].address_prefixes[0]
+          next_hop_type          = "VirtualAppliance"
+          next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
+        },
+      ]
+      associations = [
+        {
+          vnet_name   = "vnet-hub-${var.loc_short}-01"
+          subnet_name = "AppGatewaySubnet"
         }
       ]
     }
@@ -231,6 +242,163 @@ resource "azurerm_log_analytics_workspace" "main" {
 
 
 ######### filename: vng.tf #########
+# Public IP for Virtual Network Gateway
+resource "azurerm_public_ip" "vng_pip" {
+  name                = "pip-vng-hub-${var.loc_short}-01"
+  location            = var.loc
+  resource_group_name = azurerm_resource_group.hub.name
+  allocation_method   = "Static"
+  sku                 = "Standard"
+}
+
+# Virtual Network Gateway
+resource "azurerm_virtual_network_gateway" "vng" {
+  count               = var.create_vng ? 1 : 0
+  name                = "vng-hub-${var.loc_short}-01"
+  location            = var.loc
+  resource_group_name = azurerm_resource_group.hub.name
+
+  type     = "Vpn"
+  vpn_type = "RouteBased"
+
+  active_active = false
+  enable_bgp    = false
+  sku           = "VpnGw1"
+
+  ip_configuration {
+    name                 = "vng-ipconfig"
+    public_ip_address_id = azurerm_public_ip.vng_pip.id
+    subnet_id            = azurerm_subnet.subnets["vnet-hub-${var.loc_short}-01/GatewaySubnet"].id
+  }
+}
+
+data "http" "my_public_ip2" {
+  url = "https://api.ipify.org?format=text"
+}
+
+# Local Network Gateway
+resource "azurerm_local_network_gateway" "lng" {
+  count               = var.create_vng ? 1 : 0
+  name                = "lng-greghome-${var.loc_short}-01"
+  location            = var.loc
+  resource_group_name = azurerm_resource_group.hub.name
+
+  gateway_address = data.http.my_public_ip2.response_body
+  address_space   = var.lng_address_space
+}
+
+# VPN Connection
+resource "azurerm_virtual_network_gateway_connection" "vpn_connection" {
+  count                      = var.create_vng ? 1 : 0
+  name                       = "vpn-connection-${var.loc_short}-01"
+  location                   = var.loc
+  resource_group_name        = azurerm_resource_group.hub.name
+  virtual_network_gateway_id = azurerm_virtual_network_gateway.vng[0].id
+  local_network_gateway_id   = azurerm_local_network_gateway.lng[0].id
+  type                       = "IPsec"
+  connection_mode            = "Default"
+  connection_protocol        = "IKEv2"
+  shared_key                 = var.vpn_psk
+  dpd_timeout_seconds        = 45
+  # see https://registry.terraform.io/providers/hashicorp/Azurerm/latest/docs/resources/virtual_network_gateway_connection#connection_protocol-1
+  ipsec_policy {
+    dh_group         = "DHGroup14"
+    ipsec_encryption = "AES256"
+    ipsec_integrity  = "SHA256"
+    ike_encryption   = "AES256"
+    ike_integrity    = "SHA256"
+    pfs_group        = "PFS2048"
+    sa_datasize      = "0"
+    sa_lifetime      = "3600"
+  }
+}
+
+# Output for Public IP
+output "vng_public_ip" {
+  value = var.create_vng && length(azurerm_public_ip.vng_pip) > 0 ? azurerm_public_ip.vng_pip.ip_address : null # Safeguard with conditional
+}
+
+######### filename: application_gateway.tf #########
+locals {
+  appgw_name                      = "appgw-hub-${var.loc_short}-01"
+  appgw_public_ip_name            = "pip-appgw-hub-${var.loc_short}-01"
+  frontend_port_name              = "frontendPort"
+  frontend_ip_configuration_name  = "frontendIP"
+  backend_address_pool_name       = "backendPool"
+  http_setting_name               = "backendHttpSettings"
+  listener_name                   = "httpListener"
+  request_routing_rule_name       = "routingRule"
+  gateway_ip_configuration_name   = "appgw-ip-configuration"
+}
+
+resource "azurerm_public_ip" "appgw" {
+  name                = local.appgw_public_ip_name
+  location            = var.loc
+  resource_group_name = azurerm_resource_group.hub.name
+  allocation_method   = "Static"
+  sku                 = "Standard"
+}
+
+resource "azurerm_application_gateway" "appgw" {
+  name                = local.appgw_name
+  location            = var.loc
+  resource_group_name = azurerm_resource_group.hub.name
+
+  sku {
+    name     = "Standard_v2"
+    tier     = "Standard_v2"
+    capacity = 2
+  }
+
+  gateway_ip_configuration {
+    name      = local.gateway_ip_configuration_name
+    subnet_id = azurerm_subnet.subnets["vnet-hub-${var.loc_short}-01/AppGatewaySubnet"].id
+  }
+
+  frontend_port {
+    name = local.frontend_port_name
+    port = 80
+  }
+
+  frontend_ip_configuration {
+    name                 = azurerm_public_ip.appgw.name
+    public_ip_address_id = azurerm_public_ip.appgw.id
+  }
+
+  backend_address_pool {
+    name         = local.backend_address_pool_name
+    ip_addresses = [azurerm_network_interface.nics["vm-ws22-${var.loc_short}-01"].ip_configuration[0].private_ip_address]
+  }
+
+  backend_http_settings {
+    name                  = local.http_setting_name
+    cookie_based_affinity = "Disabled"
+    port                  = 80
+    protocol              = "Http"
+    request_timeout       = 30
+  }
+
+  http_listener {
+    name                           = local.listener_name
+    frontend_ip_configuration_name = local.frontend_ip_configuration_name
+    frontend_port_name             = local.frontend_port_name
+    protocol                       = "Http"
+  }
+
+  request_routing_rule {
+    name                       = local.request_routing_rule_name
+    rule_type                  = "Basic"
+    http_listener_name         = local.listener_name
+    backend_address_pool_name  = local.backend_address_pool_name
+    backend_http_settings_name = local.http_setting_name
+  }
+
+  tags = {
+    environment = "dev"
+  }
+}
+
+
 
 
 ######### filename: storage.tf #########
@@ -271,9 +439,9 @@ resource "azurerm_storage_container" "test" {
 }
 
 resource "azurerm_storage_share" "test" {
-  name                 = "test"
-  storage_account_id    = azurerm_storage_account.main.id
-  quota                = 100
+  name               = "test"
+  storage_account_id = azurerm_storage_account.main.id
+  quota              = 100
 }
 
 resource "azurerm_private_endpoint" "blob" {
@@ -361,8 +529,17 @@ resource "azurerm_firewall_policy_rule_collection_group" "default" {
     rule {
       name                  = "Onprem-Azure"
       description           = "Allow on-prem to Azure"
-      source_addresses      = ["192.168.0.0/16"]
+      source_addresses      = var.lng_address_space
       destination_ip_groups = [azurerm_ip_group.shared.id]
+      destination_ports     = ["*"]
+      protocols             = ["Any"]
+    }
+
+    rule {
+      name                  = "Azure-Onprem"
+      description           = "Allow Azure to on-prem"
+      source_ip_groups      = [azurerm_ip_group.shared.id]
+      destination_addresses = var.lng_address_space
       destination_ports     = ["*"]
       protocols             = ["Any"]
     }
@@ -619,6 +796,7 @@ locals {
         "AzureFirewallSubnet"   = { address_prefix = "10.0.0.0/24" }
         "AzureBastionSubnet"    = { address_prefix = "10.0.1.0/24" }
         "GatewaySubnet"         = { address_prefix = "10.0.2.0/24" }
+        "AppGatewaySubnet"      = { address_prefix = "10.0.3.0/24" }
         "PrivateEndpointSubnet" = { address_prefix = "10.0.15.0/24" }
       }
     }
@@ -636,8 +814,8 @@ locals {
       resource_group = azurerm_resource_group.main.name
       dns_servers    = [local.domain_controller_ip]
       subnets = {
-        "VM1Subnet"             = { address_prefix = "10.0.32.0/24" }
-        "VM2Subnet"             = { address_prefix = "10.0.33.0/24" }
+        "WindowsSubnet"         = { address_prefix = "10.0.32.0/24" }
+        "LinuxSubnet"           = { address_prefix = "10.0.33.0/24" }
         "PrivateEndpointSubnet" = { address_prefix = "10.0.47.0/24" }
       }
     }
@@ -718,6 +896,14 @@ resource "azurerm_ip_group" "shared" {
   ])
 }
 
+######### filename: azure_traffic_manager.tf #########
+
+
+######### filename: load_balancer.tf #########
+# https://learn.microsoft.com/en-us/azure/firewall/integrate-lb
+
+
+
 ######### filename: variables.tf #########
 variable "subscription_id" {
   description = "Azure subscription ID."
@@ -765,6 +951,25 @@ variable "enable_nsgs" {
   default     = true
 }
 
+variable "create_vng" {
+  description = "Enable or disable the creation of a Virtual Network Gateway."
+  type        = bool
+  default     = false
+}
+
+variable "vpn_psk" {
+  description = "Pre-shared key for the VPN connection."
+  type        = string
+  default     = ""
+}
+
+variable "lng_address_space" {
+  description = "Address space for the Local Network Gateway."
+  type        = list(string)
+  default     = ["192.168.0.0/16"]
+}
+
+
 ######### filename: virtual_machines.tf #########
 locals {
   windows_vms = {
@@ -776,14 +981,14 @@ locals {
     },
     "vm-ws22-${var.loc_short}-01" = {
       vnet_name   = "vnet-main-${var.loc_short}-01"
-      subnet_name = "VM1Subnet"
+      subnet_name = "WindowsSubnet"
       os          = "WS22"
     }
   }
   linux_vms = {
-    "vm-ubu24-${var.loc_short}-02" = {
+    "vm-ubu24-${var.loc_short}-01" = {
       vnet_name   = "vnet-main-${var.loc_short}-01"
-      subnet_name = "VM2Subnet"
+      subnet_name = "LinuxSubnet"
       os          = "UBU24"
     }
   }
@@ -916,8 +1121,14 @@ resource "azurerm_monitor_diagnostic_setting" "firewall_diagnostic" {
 
   log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
 
+  log_analytics_destination_type = "Dedicated"
+
   enabled_log {
     category_group = "allLogs"
+  }
+
+  metric {
+    category = "AllMetrics"
   }
 }
 
@@ -971,7 +1182,7 @@ resource "azurerm_network_security_group" "nsgs" {
   for_each = var.enable_nsgs ? {
     for subnet in local.subnets :
     subnet.key => subnet
-    if !contains(["AzureFirewallSubnet", "AzureBastionSubnet", "GatewaySubnet"], subnet.subnet_name)
+    if !contains(["AzureFirewallSubnet", "AzureBastionSubnet", "GatewaySubnet", "AppGatewaySubnet"], subnet.subnet_name)
   } : {}
 
   name                = "nsg-${each.value.vnet_name}_${each.value.subnet_name}"
@@ -987,10 +1198,10 @@ resource "azurerm_subnet_network_security_group_association" "nsg_association" {
   network_security_group_id = each.value.id
 }
 
-# resource "azurerm_network_security_rule" "allow_outbound_100" {
+# resource "azurerm_network_security_rule" "allow_outbound_192" {
 #   for_each = azurerm_network_security_group.nsgs
 
-#   name                        = "allow-outbound-100"
+#   name                        = "allow-outbound-192"
 #   priority                    = 100
 #   direction                   = "Outbound"
 #   access                      = "Allow"
@@ -998,12 +1209,12 @@ resource "azurerm_subnet_network_security_group_association" "nsg_association" {
 #   source_port_range           = "*"
 #   destination_port_range      = "*"
 #   source_address_prefix       = "*"
-#   destination_address_prefix  = "100.0.0.0/16"
+#   destination_address_prefix  = "192.168.0.0/16"
 #   network_security_group_name = each.value.name
 #   resource_group_name         = each.value.resource_group_name
 # }
 
-# resource "azurerm_network_security_rule" "allow_inbound_100" {
+# resource "azurerm_network_security_rule" "allow_inbound_192" {
 #   for_each = azurerm_network_security_group.nsgs
 
 #   name                        = "allow-inbound-100"
@@ -1013,7 +1224,7 @@ resource "azurerm_subnet_network_security_group_association" "nsg_association" {
 #   protocol                    = "*"
 #   source_port_range           = "*"
 #   destination_port_range      = "*"
-#   source_address_prefix       = "100.0.0.0/16"
+#   source_address_prefix       = "192.168.0.0/16"
 #   destination_address_prefix  = "*"
 #   network_security_group_name = each.value.name
 #   resource_group_name         = each.value.resource_group_name
@@ -1097,7 +1308,6 @@ resource "azurerm_resource_group" "mgmt" {
 ######### Other files and directories #########
 terraform.tfstate.backup
 terraform.tfstate
-.terraform.tfstate.lock.info
 terraform.tfvars
 .terraform/
 .git/

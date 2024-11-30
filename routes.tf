@@ -27,31 +27,13 @@ locals {
       resource_group_name = azurerm_resource_group.hub.name
       routes = [
         {
-          name                   = "Internet-Out"
-          address_prefix         = "0.0.0.0/0"
-          next_hop_type          = "Internet"
-        },
-        {
-          name                  = "UKW-to-UKWFirewall"
-          address_prefix         = "10.100.0.0/16"
-          next_hop_type          = "VirtualAppliance"
-          next_hop_in_ip_address = "10.100.0.4"
+          name           = "Internet-Out"
+          address_prefix = "0.0.0.0/0"
+          next_hop_type  = "Internet"
         },
         # {
-        #   name                   = "UKWHub-to-UKWFirewall"
-        #   address_prefix         = "10.100.0.0/20"
-        #   next_hop_type          = "VirtualAppliance"
-        #   next_hop_in_ip_address = "10.100.0.4"
-        # },
-        # {
-        #   name                   = "UKWADDS-to-UKWFirewall"
-        #   address_prefix         = "10.100.16.0/20"
-        #   next_hop_type          = "VirtualAppliance"
-        #   next_hop_in_ip_address = "10.100.0.4"
-        # },
-        # {
-        #   name                   = "UKWMain-to-UKWFirewall"
-        #   address_prefix         = "10.100.32.0/20"
+        #   name                   = "UKW-to-UKWFirewall"
+        #   address_prefix         = "10.100.0.0/16"
         #   next_hop_type          = "VirtualAppliance"
         #   next_hop_in_ip_address = "10.100.0.4"
         # },
@@ -78,6 +60,12 @@ locals {
           next_hop_type          = "VirtualAppliance"
           next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
         },
+        {
+          name                   = "AppGatewaySubnet-to-Firewall"
+          address_prefix         = azurerm_subnet.subnets["vnet-hub-${var.loc_short}-01/AppGatewaySubnet"].address_prefixes[0]
+          next_hop_type          = "VirtualAppliance"
+          next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
+        },
       ]
       associations = [
         {
@@ -101,15 +89,38 @@ locals {
           next_hop_type          = "VirtualAppliance"
           next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
         },
+        {
+          name                   = "AppGatewaySubnet-to-Firewall"
+          address_prefix         = azurerm_subnet.subnets["vnet-hub-${var.loc_short}-01/AppGatewaySubnet"].address_prefixes[0]
+          next_hop_type          = "VirtualAppliance"
+          next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
+        },
       ]
       associations = [
         {
           vnet_name   = "vnet-main-${var.loc_short}-01"
-          subnet_name = "VM1Subnet"
+          subnet_name = "WindowsSubnet"
         },
         {
           vnet_name   = "vnet-main-${var.loc_short}-01"
-          subnet_name = "VM2Subnet"
+          subnet_name = "LinuxSubnet"
+        }
+      ]
+    }
+    "rt-hub-appgw-${var.loc_short}-01" = {
+      resource_group_name = azurerm_resource_group.hub.name
+      routes = [
+        {
+          name                   = "BackendVMSubnet-to-Firewall"
+          address_prefix         = azurerm_subnet.subnets["vnet-main-${var.loc_short}-01/WindowsSubnet"].address_prefixes[0]
+          next_hop_type          = "VirtualAppliance"
+          next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
+        },
+      ]
+      associations = [
+        {
+          vnet_name   = "vnet-hub-${var.loc_short}-01"
+          subnet_name = "AppGatewaySubnet"
         }
       ]
     }

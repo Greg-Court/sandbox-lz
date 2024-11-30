@@ -35,9 +35,9 @@ resource "azurerm_storage_container" "test" {
 }
 
 resource "azurerm_storage_share" "test" {
-  name                 = "test"
-  storage_account_id    = azurerm_storage_account.main.id
-  quota                = 100
+  name               = "test"
+  storage_account_id = azurerm_storage_account.main.id
+  quota              = 100
 }
 
 resource "azurerm_private_endpoint" "blob" {
