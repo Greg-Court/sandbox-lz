@@ -40,7 +40,7 @@ resource "azurerm_application_gateway" "appgw" {
   }
 
   frontend_ip_configuration {
-    name                 = azurerm_public_ip.appgw.name
+    name                 = local.frontend_ip_configuration_name
     public_ip_address_id = azurerm_public_ip.appgw.id
   }
 
@@ -70,6 +70,7 @@ resource "azurerm_application_gateway" "appgw" {
     http_listener_name         = local.listener_name
     backend_address_pool_name  = local.backend_address_pool_name
     backend_http_settings_name = local.http_setting_name
+    priority                   = 100
   }
 
   tags = {

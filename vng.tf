@@ -9,7 +9,7 @@ resource "azurerm_public_ip" "vng_pip" {
 
 # Virtual Network Gateway
 resource "azurerm_virtual_network_gateway" "vng" {
-  count               = var.create_vng ? 1 : 0
+  count               = var.deploy_vng ? 1 : 0
   name                = "vng-hub-${var.loc_short}-01"
   location            = var.loc
   resource_group_name = azurerm_resource_group.hub.name
@@ -34,7 +34,7 @@ data "http" "my_public_ip2" {
 
 # Local Network Gateway
 resource "azurerm_local_network_gateway" "lng" {
-  count               = var.create_vng ? 1 : 0
+  count               = var.deploy_vng ? 1 : 0
   name                = "lng-greghome-${var.loc_short}-01"
   location            = var.loc
   resource_group_name = azurerm_resource_group.hub.name
@@ -45,7 +45,7 @@ resource "azurerm_local_network_gateway" "lng" {
 
 # VPN Connection
 resource "azurerm_virtual_network_gateway_connection" "vpn_connection" {
-  count                      = var.create_vng ? 1 : 0
+  count                      = var.deploy_vng ? 1 : 0
   name                       = "vpn-connection-${var.loc_short}-01"
   location                   = var.loc
   resource_group_name        = azurerm_resource_group.hub.name
@@ -71,5 +71,5 @@ resource "azurerm_virtual_network_gateway_connection" "vpn_connection" {
 
 # Output for Public IP
 output "vng_public_ip" {
-  value = var.create_vng && length(azurerm_public_ip.vng_pip) > 0 ? azurerm_public_ip.vng_pip.ip_address : null # Safeguard with conditional
+  value = var.deploy_vng && length(azurerm_public_ip.vng_pip) > 0 ? azurerm_public_ip.vng_pip.ip_address : null # Safeguard with conditional
 }

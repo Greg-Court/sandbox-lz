@@ -1,3 +1,5 @@
+# vnets_hub.tf
+
 # Local variable for the Domain Controller IP
 locals {
   hub_vnets = {
@@ -7,7 +9,18 @@ locals {
       address_space  = ["10.0.0.0/20"]
       resource_group = azurerm_resource_group.hub.name
       dns_servers    = [local.domain_controller_ip]
-      vnet_routes    = null
+      vnet_routes = {
+        "MainVNet-to-Firewall" = {
+          address_prefix         = "10.0.32.0/20"
+          next_hop_type          = "VirtualAppliance"
+          next_hop_in_ip_address = "10.0.0.4"
+        }
+        "ADDSVNet-to-Firewall" = {
+          address_prefix         = "10.0.16.0/20"
+          next_hop_type          = "VirtualAppliance"
+          next_hop_in_ip_address = "10.0.0.4"
+        }
+      }
       subnets = {
         "AzureFirewallSubnet" = {
           address_prefix = "10.0.0.0/24"
@@ -24,18 +37,7 @@ locals {
         }
         "GatewaySubnet" = {
           address_prefix = "10.0.2.0/24"
-          routes = {
-            "MainVNet-to-Firewall" = {
-              address_prefix         = "10.0.32.0/20"
-              next_hop_type          = "VirtualAppliance"
-              next_hop_in_ip_address = "10.0.0.4"
-            }
-            "ADDSVNet-to-Firewall" = {
-              address_prefix         = "10.0.16.0/20"
-              next_hop_type          = "VirtualAppliance"
-              next_hop_in_ip_address = "10.0.0.4"
-            }
-          }
+          routes         = null
         }
         "AppGatewaySubnet" = {
           address_prefix = "10.0.3.0/24"
@@ -53,14 +55,15 @@ locals {
   hub_subnets = flatten([
     for vnet_key, vnet in local.hub_vnets : [
       for subnet_name, subnet in vnet.subnets : {
-        key              = "${vnet_key}/${subnet_name}"
-        vnet_name        = vnet.vnet_name
-        subnet_name      = subnet_name
-        address_prefix   = subnet.address_prefix
-        resource_group   = vnet.resource_group
-        location         = vnet.location
-        subnet_routes    = subnet.routes
-        route_table_name = subnet.routes != null ? "rt-${lower(replace(subnet_name, "Subnet", "sn"))}-${replace(vnet.vnet_name, "vnet-", "")}" : null
+        key                   = "${vnet_key}/${subnet_name}"
+        vnet_name             = vnet.vnet_name
+        subnet_name           = subnet_name
+        address_prefix        = subnet.address_prefix
+        resource_group        = vnet.resource_group
+        location              = vnet.location
+        subnet_routes         = subnet.routes
+        route_table_name      = subnet.routes != null ? "rt-${lower(replace(subnet_name, "Subnet", "sn"))}-${replace(vnet.vnet_name, "vnet-", "")}" : null
+        vnet_route_table_name = vnet.vnet_routes != null ? "rt-${replace(vnet.vnet_name, "vnet-", "")}" : null
       }
     ]
   ])
@@ -72,6 +75,7 @@ locals {
       location            = vnet.location
       resource_group_name = vnet.resource_group
       routes              = vnet.vnet_routes
+      vnet_name           = vnet.vnet_name
     }
     if vnet.vnet_routes != null
   }
@@ -83,8 +87,9 @@ locals {
       location            = subnet.location
       resource_group_name = subnet.resource_group
       routes              = subnet.subnet_routes
+      vnet_name           = subnet.vnet_name
     }
-    if subnet.subnet_routes != null
+    if subnet.route_table_name != null
   }
 
   # Merge all route tables
@@ -121,7 +126,7 @@ resource "azurerm_route_table" "hub_rt" {
   resource_group_name = each.value.resource_group_name
 
   dynamic "route" {
-    for_each = [for route_name, route in each.value.routes : merge(route, { name = route_name })]
+    for_each = each.value.routes != null ? [for route_name, route in each.value.routes : merge(route, { name = route_name })] : []
 
     content {
       name                   = route.value.name
@@ -132,16 +137,31 @@ resource "azurerm_route_table" "hub_rt" {
   }
 }
 
+# Prepare subnet route table associations
+locals {
+  hub_subnet_route_table_associations = {
+    for subnet in local.hub_subnets :
+    subnet.key => {
+      subnet_id = azurerm_subnet.hub_subnets[subnet.key].id
+      route_table_id = (
+        subnet.route_table_name != null ? azurerm_route_table.hub_rt[subnet.route_table_name].id :
+        subnet.vnet_route_table_name != null ? azurerm_route_table.hub_rt[subnet.vnet_route_table_name].id :
+        null
+      )
+    }
+    if (
+      (subnet.route_table_name != null || subnet.vnet_route_table_name != null) &&
+      !contains(["AzureBastionSubnet"], subnet.subnet_name)
+    )
+  }
+}
+
 # Associate Route Tables with Hub Subnets
 resource "azurerm_subnet_route_table_association" "hub_assoc" {
-  for_each = {
-    for subnet in local.hub_subnets :
-    subnet.key => subnet
-    if subnet.route_table_name != null
-  }
+  for_each = local.hub_subnet_route_table_associations
 
-  subnet_id      = azurerm_subnet.hub_subnets[each.key].id
-  route_table_id = azurerm_route_table.hub_rt[each.value.route_table_name].id
+  subnet_id      = each.value.subnet_id
+  route_table_id = each.value.route_table_id
 }
 
 # Hub NSGs and Associations (if needed)
@@ -152,7 +172,7 @@ resource "azurerm_network_security_group" "hub_nsgs" {
     if var.enable_nsgs && !contains(["AzureFirewallSubnet", "AzureBastionSubnet", "GatewaySubnet", "AppGatewaySubnet"], subnet.subnet_name)
   }
 
-  name                = "nsg-${each.value.vnet_name}-${each.value.subnet_name}"
+  name                = "nsg-${lower(replace(each.value.subnet_name, "Subnet", "sn"))}-${replace(each.value.vnet_name, "vnet-", "")}"
   location            = each.value.location
   resource_group_name = each.value.resource_group
 }

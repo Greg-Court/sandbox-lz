@@ -32,7 +32,7 @@ variable "active_directory_domain" {
   default     = "big.brain"
 }
 
-variable "create_bastion" {
+variable "deploy_bastion" {
   description = "Create Azure Bastion."
   type        = bool
   default     = true
@@ -44,8 +44,14 @@ variable "enable_nsgs" {
   default     = true
 }
 
-variable "create_vng" {
+variable "deploy_vng" {
   description = "Enable or disable the creation of a Virtual Network Gateway."
+  type        = bool
+  default     = false
+}
+
+variable "deploy_appgw" {
+  description = "Enable or disable the creation of an Application Gateway."
   type        = bool
   default     = false
 }
