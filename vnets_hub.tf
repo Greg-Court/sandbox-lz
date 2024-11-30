@@ -30,6 +30,7 @@ locals {
               next_hop_type  = "Internet"
             }
           }
+          bgp_enabled = true
         }
         "AzureBastionSubnet" = {
           address_prefix = "10.0.1.0/24"
@@ -125,6 +126,15 @@ resource "azurerm_route_table" "hub_rt" {
   location            = each.value.location
   resource_group_name = each.value.resource_group_name
 
+  # Dynamically enable/disable BGP route propagation
+  bgp_route_propagation_enabled = try(
+    flatten([
+      for subnet in local.spoke_subnets :
+      subnet if subnet.vnet_name == each.value.vnet_name && subnet.route_table_name == each.key
+    ])[0].bgp_enabled,
+    false
+  )
+
   dynamic "route" {
     for_each = each.value.routes != null ? [for route_name, route in each.value.routes : merge(route, { name = route_name })] : []
 
@@ -149,7 +159,7 @@ locals {
         null
       )
     }
-    if (
+    if(
       (subnet.route_table_name != null || subnet.vnet_route_table_name != null) &&
       !contains(["AzureBastionSubnet"], subnet.subnet_name)
     )
