@@ -18,7 +18,7 @@ resource "azurerm_firewall" "primary" {
 
   ip_configuration {
     name                 = "ipconfig"
-    subnet_id            = azurerm_subnet.subnets["vnet-hub-${var.loc_short}-01/AzureFirewallSubnet"].id
+    subnet_id            = azurerm_subnet.hub_subnets["vnet-hub-${var.loc_short}-01/AzureFirewallSubnet"].id
     public_ip_address_id = azurerm_public_ip.firewall_pip.id
   }
 

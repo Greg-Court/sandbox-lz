@@ -24,7 +24,7 @@ resource "azurerm_virtual_network_gateway" "vng" {
   ip_configuration {
     name                 = "vng-ipconfig"
     public_ip_address_id = azurerm_public_ip.vng_pip.id
-    subnet_id            = azurerm_subnet.subnets["vnet-hub-${var.loc_short}-01/GatewaySubnet"].id
+    subnet_id            = azurerm_subnet.hub_subnets["vnet-hub-${var.loc_short}-01/GatewaySubnet"].id
   }
 }
 

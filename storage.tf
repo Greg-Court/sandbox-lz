@@ -44,7 +44,7 @@ resource "azurerm_private_endpoint" "blob" {
   name                = "pe-blob-stmain${var.loc_short}${random_integer.st.result}"
   location            = var.loc
   resource_group_name = azurerm_resource_group.main.name
-  subnet_id           = azurerm_subnet.subnets["vnet-main-${var.loc_short}-01/PrivateEndpointSubnet"].id
+  subnet_id           = azurerm_subnet.spoke_subnets["vnet-main-${var.loc_short}-01/PrivateEndpointSubnet"].id
 
   private_service_connection {
     name                           = "psc-stmain${var.loc_short}${random_integer.st.result}"
@@ -65,7 +65,7 @@ resource "azurerm_private_endpoint" "file" {
   name                = "pe-file-stmain${var.loc_short}${random_integer.st.result}"
   location            = var.loc
   resource_group_name = azurerm_resource_group.main.name
-  subnet_id           = azurerm_subnet.subnets["vnet-main-${var.loc_short}-01/PrivateEndpointSubnet"].id
+  subnet_id           = azurerm_subnet.spoke_subnets["vnet-main-${var.loc_short}-01/PrivateEndpointSubnet"].id
 
   private_service_connection {
     name                           = "psc-stmain${var.loc_short}${random_integer.st.result}"

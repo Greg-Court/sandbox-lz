@@ -2,12 +2,14 @@ locals {
   windows_vms = {
     "vm-dc-${var.loc_short}-01" = {
       vnet_name          = "vnet-adds-${var.loc_short}-01"
+      rg_name            = azurerm_resource_group.identity.name
       subnet_name        = "ADDSSubnet"
       private_ip_address = local.domain_controller_ip
       os                 = "WS22"
     },
     "vm-ws22-${var.loc_short}-01" = {
       vnet_name   = "vnet-main-${var.loc_short}-01"
+      rg_name            = azurerm_resource_group.main.name
       subnet_name = "WindowsSubnet"
       os          = "WS22"
     }
@@ -15,6 +17,7 @@ locals {
   linux_vms = {
     "vm-ubu24-${var.loc_short}-01" = {
       vnet_name   = "vnet-main-${var.loc_short}-01"
+      rg_name            = azurerm_resource_group.main.name
       subnet_name = "LinuxSubnet"
       os          = "UBU24"
     }
@@ -41,11 +44,11 @@ resource "azurerm_network_interface" "nics" {
 
   name                = "nic-${each.key}"
   location            = var.loc
-  resource_group_name = local.virtual_networks[each.value.vnet_name].resource_group
+  resource_group_name = each.value.rg_name
 
   ip_configuration {
     name                          = "ipconfig"
-    subnet_id                     = azurerm_subnet.subnets["${each.value.vnet_name}/${each.value.subnet_name}"].id
+    subnet_id                     = azurerm_subnet.spoke_subnets["${each.value.vnet_name}/${each.value.subnet_name}"].id
     private_ip_address_allocation = "Dynamic"
   }
 }

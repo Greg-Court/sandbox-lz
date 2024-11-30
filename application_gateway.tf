@@ -31,7 +31,7 @@ resource "azurerm_application_gateway" "appgw" {
 
   gateway_ip_configuration {
     name      = local.gateway_ip_configuration_name
-    subnet_id = azurerm_subnet.subnets["vnet-hub-${var.loc_short}-01/AppGatewaySubnet"].id
+    subnet_id = azurerm_subnet.hub_subnets["vnet-hub-${var.loc_short}-01/AppGatewaySubnet"].id
   }
 
   frontend_port {
