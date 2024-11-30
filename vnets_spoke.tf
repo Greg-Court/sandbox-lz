@@ -1,8 +1,8 @@
 # Local variable for the Domain Controller IP
 locals {
-  spoke_virtual_networks = {
+  spoke_vnets = {
     "vnet-adds-${var.loc_short}-01" = {
-      hub            = azurerm_virtual_network.hub_vnet
+      hub            = azurerm_virtual_network.hub_vnets["vnet-hub-${var.loc_short}-01"]
       vnet_name      = "vnet-adds-${var.loc_short}-01"
       location       = var.loc
       address_space  = ["10.0.16.0/20"]
@@ -37,7 +37,7 @@ locals {
       vnet_routes = null
     }
     "vnet-main-${var.loc_short}-01" = {
-      hub            = azurerm_virtual_network.hub_vnet
+      hub            = azurerm_virtual_network.hub_vnets["vnet-hub-${var.loc_short}-01"]
       vnet_name      = "vnet-main-${var.loc_short}-01"
       location       = var.loc
       address_space  = ["10.0.32.0/20"]
@@ -95,16 +95,16 @@ locals {
 
   # Flatten Subnets and Prepare Route Table Names
   spoke_subnets = flatten([
-    for vnet_key, vnet in local.spoke_virtual_networks : [
+    for vnet_key, vnet in local.spoke_vnets : [
       for subnet_name, subnet in vnet.subnets : {
-        key               = "${vnet_key}/${subnet_name}"
-        vnet_name         = vnet.vnet_name
-        subnet_name       = subnet_name
-        address_prefix    = subnet.address_prefix
-        resource_group    = vnet.resource_group
-        location          = vnet.location
-        subnet_routes     = subnet.routes
-        route_table_name  = subnet.routes != null ? "rt-${lower(replace(subnet_name, "Subnet", "sn"))}-${replace(vnet.vnet_name, "vnet-", "")}" : null
+        key              = "${vnet_key}/${subnet_name}"
+        vnet_name        = vnet.vnet_name
+        subnet_name      = subnet_name
+        address_prefix   = subnet.address_prefix
+        resource_group   = vnet.resource_group
+        location         = vnet.location
+        subnet_routes    = subnet.routes
+        route_table_name = subnet.routes != null ? "rt-${lower(replace(subnet_name, "Subnet", "sn"))}-${replace(vnet.vnet_name, "vnet-", "")}" : null
       }
     ]
   ])
@@ -120,12 +120,12 @@ locals {
     if subnet.subnet_routes != null
   }
 
-  spoke_all_route_tables = spoke_subnet_route_tables
+  spoke_all_route_tables = local.spoke_subnet_route_tables
 }
 
 # Create Spoke Virtual Networks
 resource "azurerm_virtual_network" "spoke_vnets" {
-  for_each = local.spoke_virtual_networks
+  for_each = local.spoke_vnets
 
   name                = each.value.vnet_name
   location            = each.value.location
@@ -178,7 +178,7 @@ resource "azurerm_subnet_route_table_association" "spoke_assoc" {
 
 # Peering from Spoke to Hub
 resource "azurerm_virtual_network_peering" "hub_spoke" {
-  for_each = local.spoke_virtual_networks
+  for_each = local.spoke_vnets
 
   name                      = "peering-${each.value.vnet_name}-to-hub"
   resource_group_name       = each.value.resource_group
@@ -193,7 +193,7 @@ resource "azurerm_virtual_network_peering" "hub_spoke" {
 
 # Peering from Hub to Spoke
 resource "azurerm_virtual_network_peering" "spoke_hub" {
-  for_each = local.spoke_virtual_networks
+  for_each = local.spoke_vnets
 
   name                      = "peering-hub-to-${each.value.vnet_name}"
   resource_group_name       = each.value.hub.resource_group_name

@@ -1,13 +1,13 @@
 locals {
-  appgw_name                      = "appgw-hub-${var.loc_short}-01"
-  appgw_public_ip_name            = "pip-appgw-hub-${var.loc_short}-01"
-  frontend_port_name              = "frontendPort"
-  frontend_ip_configuration_name  = "frontendIP"
-  backend_address_pool_name       = "backendPool"
-  http_setting_name               = "backendHttpSettings"
-  listener_name                   = "httpListener"
-  request_routing_rule_name       = "routingRule"
-  gateway_ip_configuration_name   = "appgw-ip-configuration"
+  appgw_name                     = "appgw-hub-${var.loc_short}-01"
+  appgw_public_ip_name           = "pip-appgw-hub-${var.loc_short}-01"
+  frontend_port_name             = "frontendPort"
+  frontend_ip_configuration_name = "frontendIP"
+  backend_address_pool_name      = "backendPool"
+  http_setting_name              = "backendHttpSettings"
+  listener_name                  = "httpListener"
+  request_routing_rule_name      = "routingRule"
+  gateway_ip_configuration_name  = "appgw-ip-configuration"
 }
 
 resource "azurerm_public_ip" "appgw" {

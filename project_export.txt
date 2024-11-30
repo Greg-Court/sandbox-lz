@@ -304,6 +304,45 @@ resource "azurerm_private_endpoint" "file" {
 
 
 ######### filename: firewall_policy.tf #########
+locals {
+  all_vnets = merge(
+    {
+      for vnet_key, vnet in local.hub_vnets :
+      vnet_key => {
+        vnet_name      = vnet.vnet_name
+        resource_group = vnet.resource_group
+        address_space  = vnet.address_space
+      }
+    },
+    {
+      for vnet_key, vnet in local.spoke_vnets :
+      vnet_key => {
+        vnet_name      = vnet.vnet_name
+        resource_group = vnet.resource_group
+        address_space  = vnet.address_space
+      }
+    }
+  )
+
+  all_vnet_address_spaces = flatten([
+    for vnet in local.all_vnets : vnet.address_space
+  ])
+}
+
+
+resource "azurerm_ip_group" "internal" {
+  name                = "ipg-internal-${var.loc_short}"
+  location            = var.loc
+  resource_group_name = azurerm_resource_group.hub.name
+
+  dynamic "ip_address" {
+    for_each = local.all_vnet_address_spaces
+    content {
+      ip_address = ip_address.value
+    }
+  }
+}
+
 resource "azurerm_firewall_policy" "primary" {
   name                = "afwp-hub-${var.loc_short}-01"
   resource_group_name = azurerm_resource_group.hub.name
@@ -327,8 +366,8 @@ resource "azurerm_firewall_policy_rule_collection_group" "default" {
     rule {
       name                  = "East-West"
       description           = "Allow Any East-West traffic"
-      source_ip_groups      = [azurerm_ip_group.shared.id]
-      destination_ip_groups = [azurerm_ip_group.shared.id]
+      source_ip_groups      = [azurerm_ip_group.internal.id]
+      destination_ip_groups = [azurerm_ip_group.internal.id]
       destination_ports     = ["*"]
       protocols             = ["Any"]
     }
@@ -346,7 +385,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "default" {
       name                  = "Onprem-Azure"
       description           = "Allow on-prem to Azure"
       source_addresses      = var.lng_address_space
-      destination_ip_groups = [azurerm_ip_group.shared.id]
+      destination_ip_groups = [azurerm_ip_group.internal.id]
       destination_ports     = ["*"]
       protocols             = ["Any"]
     }
@@ -354,7 +393,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "default" {
     rule {
       name                  = "Azure-Onprem"
       description           = "Allow Azure to on-prem"
-      source_ip_groups      = [azurerm_ip_group.shared.id]
+      source_ip_groups      = [azurerm_ip_group.internal.id]
       destination_addresses = var.lng_address_space
       destination_ports     = ["*"]
       protocols             = ["Any"]
@@ -371,7 +410,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "default" {
     rule {
       name                  = "Internet"
       description           = "Allow Any Internet"
-      source_ip_groups      = [azurerm_ip_group.shared.id]
+      source_ip_groups      = [azurerm_ip_group.internal.id]
       destination_addresses = ["*"]
       destination_ports     = ["*"]
       protocols             = ["Any"]
@@ -394,7 +433,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
     rule {
       name                  = "KMS"
       description           = "Allow KMS (Windows Activation)"
-      source_ip_groups      = [azurerm_ip_group.shared.id]
+      source_ip_groups      = [azurerm_ip_group.internal.id]
       destination_addresses = ["23.102.135.246", "20.118.99.224", "40.83.235.53"]
       destination_ports     = ["1688"]
       protocols             = ["TCP"]
@@ -403,7 +442,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
     rule {
       name                  = "Azure-WireServer"
       description           = "Azure platform resources"
-      source_ip_groups      = [azurerm_ip_group.shared.id]
+      source_ip_groups      = [azurerm_ip_group.internal.id]
       destination_addresses = ["168.63.129.16"]
       destination_ports     = ["80", "32526"]
       protocols             = ["TCP"]
@@ -412,7 +451,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
     rule {
       name              = "Windows-Time"
       description       = "Windows Time"
-      source_ip_groups  = [azurerm_ip_group.shared.id]
+      source_ip_groups  = [azurerm_ip_group.internal.id]
       destination_fqdns = ["time.windows.com"]
       destination_ports = ["123"]
       protocols         = ["UDP"]
@@ -421,7 +460,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
     rule {
       name                  = "DNS-Inbound"
       description           = "Allow DNS Inbound"
-      source_ip_groups      = [azurerm_ip_group.shared.id]
+      source_ip_groups      = [azurerm_ip_group.internal.id]
       destination_addresses = [azurerm_firewall.primary.ip_configuration.0.private_ip_address]
       destination_ports     = ["53"]
       protocols             = ["Any"]
@@ -439,7 +478,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
     rule {
       name                  = "Microsoft-Defender-For-Endpoint"
       description           = "Allow Microsoft Defender for Endpoint"
-      source_ip_groups      = [azurerm_ip_group.shared.id]
+      source_ip_groups      = [azurerm_ip_group.internal.id]
       destination_addresses = ["MicrosoftDefenderForEndpoint"]
       destination_ports     = ["80", "443"]
       protocols             = ["Any"]
@@ -448,7 +487,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
     rule {
       name                  = "Microsoft-Entra-ID"
       description           = "Allow Microsoft Entra ID"
-      source_ip_groups      = [azurerm_ip_group.shared.id]
+      source_ip_groups      = [azurerm_ip_group.internal.id]
       destination_addresses = ["AzureActiveDirectory"]
       destination_ports     = ["443"]
       protocols             = ["Any"]
@@ -457,7 +496,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
     rule {
       name                  = "Azure-Storage"
       description           = "Allow Azure Storage"
-      source_ip_groups      = [azurerm_ip_group.shared.id]
+      source_ip_groups      = [azurerm_ip_group.internal.id]
       destination_addresses = ["Storage"]
       destination_ports     = ["443"]
       protocols             = ["Any"]
@@ -466,7 +505,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
     rule {
       name                  = "Azure-Events-Hub"
       description           = "Allow Azure Events Hub"
-      source_ip_groups      = [azurerm_ip_group.shared.id]
+      source_ip_groups      = [azurerm_ip_group.internal.id]
       destination_addresses = ["EventHub"]
       destination_ports     = ["443"]
       protocols             = ["Any"]
@@ -475,7 +514,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
     rule {
       name                  = "Azure-Guest-And-Hybrid-Management"
       description           = "Allow Guest and Hybrid Management"
-      source_ip_groups      = [azurerm_ip_group.shared.id]
+      source_ip_groups      = [azurerm_ip_group.internal.id]
       destination_addresses = ["GuestAndHybridManagement"]
       destination_ports     = ["443"]
       protocols             = ["Any"]
@@ -484,7 +523,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
     rule {
       name                  = "Azure-Key-Vault"
       description           = "Allow Azure Key Vault"
-      source_ip_groups      = [azurerm_ip_group.shared.id]
+      source_ip_groups      = [azurerm_ip_group.internal.id]
       destination_addresses = ["AzureKeyVault"]
       destination_ports     = ["443"]
       protocols             = ["Any"]
@@ -493,7 +532,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
     rule {
       name                  = "Azure-Site-Recovery"
       description           = "Allow Azure Site Recovery"
-      source_ip_groups      = [azurerm_ip_group.shared.id]
+      source_ip_groups      = [azurerm_ip_group.internal.id]
       destination_addresses = ["AzureSiteRecovery"]
       destination_ports     = ["443"]
       protocols             = ["Any"]
@@ -508,7 +547,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
 
     rule {
       name             = "Azure-Backup"
-      source_ip_groups = [azurerm_ip_group.shared.id]
+      source_ip_groups = [azurerm_ip_group.internal.id]
       protocols {
         type = "Https"
         port = 443
@@ -518,7 +557,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
 
     rule {
       name             = "Azure-Virtual-Desktop"
-      source_ip_groups = [azurerm_ip_group.shared.id]
+      source_ip_groups = [azurerm_ip_group.internal.id]
       protocols {
         type = "Https"
         port = 443
@@ -528,7 +567,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
 
     rule {
       name             = "Azure-Monitor-Agent"
-      source_ip_groups = [azurerm_ip_group.shared.id]
+      source_ip_groups = [azurerm_ip_group.internal.id]
       protocols {
         type = "Https"
         port = 443
@@ -544,7 +583,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
 
     rule {
       name             = "Windows-Update"
-      source_ip_groups = [azurerm_ip_group.shared.id]
+      source_ip_groups = [azurerm_ip_group.internal.id]
       protocols {
         type = "Https"
         port = 443
@@ -554,7 +593,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
 
     rule {
       name             = "Windows-Diagnostics"
-      source_ip_groups = [azurerm_ip_group.shared.id]
+      source_ip_groups = [azurerm_ip_group.internal.id]
       protocols {
         type = "Https"
         port = 443
@@ -564,7 +603,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
 
     rule {
       name             = "MAPS"
-      source_ip_groups = [azurerm_ip_group.shared.id]
+      source_ip_groups = [azurerm_ip_group.internal.id]
       protocols {
         type = "Https"
         port = 443
@@ -574,7 +613,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
 
     rule {
       name             = "Certificate-Authorities"
-      source_ip_groups = [azurerm_ip_group.shared.id]
+      source_ip_groups = [azurerm_ip_group.internal.id]
       protocols {
         type = "Https"
         port = 443
@@ -600,404 +639,6 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
     }
   }
 }
-
-######### filename: hub_vnets.tf #########
-# Local variable for the Domain Controller IP
-locals {
-  hub_virtual_networks = {
-    "vnet-hub-${var.loc_short}-01" = {
-      vnet_name      = "vnet-hub-${var.loc_short}-01"
-      location       = var.loc
-      address_space  = ["10.0.0.0/20"]
-      resource_group = azurerm_resource_group.hub.name
-      dns_servers    = [local.domain_controller_ip]
-      vnet_routes    = null
-      subnets = {
-        "AzureFirewallSubnet" = {
-          address_prefix = "10.0.0.0/24"
-          routes = {
-            "Internet-Out" = {
-              address_prefix = "0.0.0.0/0"
-              next_hop_type  = "Internet"
-            }
-          }
-        }
-        "AzureBastionSubnet" = {
-          address_prefix = "10.0.1.0/24"
-          routes         = null
-        }
-        "GatewaySubnet" = {
-          address_prefix = "10.0.2.0/24"
-          routes = {
-            "MainVNet-to-Firewall" = {
-              address_prefix         = "10.0.32.0/20" # vnet-main address space
-              next_hop_type          = "VirtualAppliance"
-              next_hop_in_ip_address = "10.0.0.4"
-            }
-            "ADDSVNet-to-Firewall" = {
-              address_prefix         = "10.0.16.0/20" # vnet-adds address space
-              next_hop_type          = "VirtualAppliance"
-              next_hop_in_ip_address = "10.0.0.4"
-            }
-          }
-        }
-        "AppGatewaySubnet" = {
-          address_prefix = "10.0.3.0/24"
-          routes         = null
-        }
-        "PrivateEndpointSubnet" = {
-          address_prefix = "10.0.15.0/24"
-          routes         = null
-        }
-      }
-    }
-  }
-
-  # Flatten subnets and prepare route table names
-  hub_subnets = flatten([
-    for vnet_key, vnet in local.hub_virtual_networks : [
-      for subnet_name, subnet in vnet.subnets : {
-        key               = "${vnet_key}/${subnet_name}"
-        vnet_name         = vnet.vnet_name
-        subnet_name       = subnet_name
-        address_prefix    = subnet.address_prefix
-        resource_group    = vnet.resource_group
-        location          = vnet.location
-        subnet_routes     = subnet.routes
-        route_table_name  = subnet.routes != null ? "rt-${lower(replace(subnet_name, "Subnet", "sn"))}-${replace(vnet.vnet_name, "vnet-", "")}" : null
-      }
-    ]
-  ])
-
-  # Define Route Tables per VNet
-  hub_vnet_route_tables = {
-    for vnet_key, vnet in local.hub_virtual_networks :
-    "rt-${replace(vnet.vnet_name, "vnet-", "")}" => {
-      location            = vnet.location
-      resource_group_name = vnet.resource_group
-      routes              = vnet.vnet_routes
-    }
-    if vnet.vnet_routes != null
-  }
-
-  # Define Route Tables per Subnet
-  hub_subnet_route_tables = {
-    for subnet in local.hub_subnets :
-    subnet.route_table_name => {
-      location            = subnet.location
-      resource_group_name = subnet.resource_group
-      routes              = subnet.subnet_routes
-    }
-    if subnet.subnet_routes != null
-  }
-
-  # Merge all route tables
-  hub_all_route_tables = merge(local.hub_vnet_route_tables, local.hub_subnet_route_tables)
-}
-
-# Create Hub Virtual Networks
-resource "azurerm_virtual_network" "hub_vnets" {
-  for_each = local.hub_virtual_networks
-
-  name                = each.value.vnet_name
-  location            = each.value.location
-  resource_group_name = each.value.resource_group
-  address_space       = each.value.address_space
-  dns_servers         = each.value.dns_servers
-}
-
-# Create Hub Subnets
-resource "azurerm_subnet" "hub_subnets" {
-  for_each = { for subnet in local.hub_subnets : subnet.key => subnet }
-
-  name                 = each.value.subnet_name
-  address_prefixes     = [each.value.address_prefix]
-  resource_group_name  = each.value.resource_group
-  virtual_network_name = azurerm_virtual_network.hub_vnets[each.value.vnet_name].name
-}
-
-# Create Hub Route Tables
-resource "azurerm_route_table" "hub_rt" {
-  for_each = local.hub_all_route_tables
-
-  name                = each.key
-  location            = each.value.location
-  resource_group_name = each.value.resource_group_name
-
-  dynamic "route" {
-    for_each = [for route_name, route in each.value.routes : merge(route, { name = route_name })]
-
-    content {
-      name                   = route.value.name
-      address_prefix         = route.value.address_prefix
-      next_hop_type          = route.value.next_hop_type
-      next_hop_in_ip_address = lookup(route.value, "next_hop_in_ip_address", null)
-    }
-  }
-}
-
-# Associate Route Tables with Hub Subnets
-resource "azurerm_subnet_route_table_association" "hub_assoc" {
-  for_each = {
-    for subnet in local.hub_subnets :
-    subnet.key => subnet
-    if subnet.route_table_name != null
-  }
-
-  subnet_id      = azurerm_subnet.hub_subnets[each.key].id
-  route_table_id = azurerm_route_table.hub_rt[each.value.route_table_name].id
-}
-
-# Hub NSGs and Associations (if needed)
-resource "azurerm_network_security_group" "hub_nsgs" {
-  for_each = {
-    for subnet in local.hub_subnets :
-    subnet.key => subnet
-    if var.enable_nsgs && !contains(["AzureFirewallSubnet", "AzureBastionSubnet", "GatewaySubnet", "AppGatewaySubnet"], subnet.subnet_name)
-  }
-
-  name                = "nsg-${each.value.vnet_name}-${each.value.subnet_name}"
-  location            = each.value.location
-  resource_group_name = each.value.resource_group
-}
-
-resource "azurerm_subnet_network_security_group_association" "hub_nsg_assoc" {
-  for_each = azurerm_network_security_group.hub_nsgs
-
-  subnet_id                 = azurerm_subnet.hub_subnets[each.key].id
-  network_security_group_id = each.value.id
-}
-
-
-######### filename: spoke_vnets.tf #########
-# Local variable for the Domain Controller IP
-locals {
-  spoke_virtual_networks = {
-    "vnet-adds-${var.loc_short}-01" = {
-      hub            = azurerm_virtual_network.hub_vnet
-      vnet_name      = "vnet-adds-${var.loc_short}-01"
-      location       = var.loc
-      address_space  = ["10.0.16.0/20"]
-      resource_group = azurerm_resource_group.identity.name
-      dns_servers    = [local.domain_controller_ip]
-      subnets = {
-        "ADDSSubnet" = {
-          address_prefix = "10.0.16.0/24"
-          routes = {
-            "Internet-to-Firewall" = {
-              address_prefix         = "0.0.0.0/0"
-              next_hop_type          = "VirtualAppliance"
-              next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
-            }
-            "VNetLocal-to-Firewall" = {
-              address_prefix         = "10.0.16.0/20"
-              next_hop_type          = "VirtualAppliance"
-              next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
-            }
-            "AppGatewaySubnet-to-Firewall" = {
-              address_prefix         = azurerm_subnet.hub_subnets["vnet-hub-${var.loc_short}-01/AppGatewaySubnet"].address_prefixes[0]
-              next_hop_type          = "VirtualAppliance"
-              next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
-            }
-          }
-        }
-        "PrivateEndpointSubnet" = {
-          address_prefix = "10.0.31.0/24"
-          routes         = null
-        }
-      }
-      vnet_routes = null
-    }
-    "vnet-main-${var.loc_short}-01" = {
-      hub            = azurerm_virtual_network.hub_vnet
-      vnet_name      = "vnet-main-${var.loc_short}-01"
-      location       = var.loc
-      address_space  = ["10.0.32.0/20"]
-      resource_group = azurerm_resource_group.main.name
-      dns_servers    = [local.domain_controller_ip]
-      subnets = {
-        "WindowsSubnet" = {
-          address_prefix = "10.0.32.0/24"
-          routes = {
-            "Internet-to-Firewall" = {
-              address_prefix         = "0.0.0.0/0"
-              next_hop_type          = "VirtualAppliance"
-              next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
-            }
-            "VNetLocal-to-Firewall" = {
-              address_prefix         = "10.0.32.0/20"
-              next_hop_type          = "VirtualAppliance"
-              next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
-            }
-            "AppGatewaySubnet-to-Firewall" = {
-              address_prefix         = azurerm_subnet.hub_subnets["vnet-hub-${var.loc_short}-01/AppGatewaySubnet"].address_prefixes[0]
-              next_hop_type          = "VirtualAppliance"
-              next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
-            }
-          }
-        }
-        "LinuxSubnet" = {
-          address_prefix = "10.0.33.0/24"
-          routes = {
-            "Internet-to-Firewall" = {
-              address_prefix         = "0.0.0.0/0"
-              next_hop_type          = "VirtualAppliance"
-              next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
-            }
-            "VNetLocal-to-Firewall" = {
-              address_prefix         = "10.0.32.0/20"
-              next_hop_type          = "VirtualAppliance"
-              next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
-            }
-            "AppGatewaySubnet-to-Firewall" = {
-              address_prefix         = azurerm_subnet.hub_subnets["vnet-hub-${var.loc_short}-01/AppGatewaySubnet"].address_prefixes[0]
-              next_hop_type          = "VirtualAppliance"
-              next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
-            }
-          }
-        }
-        "PrivateEndpointSubnet" = {
-          address_prefix = "10.0.47.0/24"
-          routes         = null
-        }
-      }
-      vnet_routes = null
-    }
-  }
-
-  # Flatten Subnets and Prepare Route Table Names
-  spoke_subnets = flatten([
-    for vnet_key, vnet in local.spoke_virtual_networks : [
-      for subnet_name, subnet in vnet.subnets : {
-        key               = "${vnet_key}/${subnet_name}"
-        vnet_name         = vnet.vnet_name
-        subnet_name       = subnet_name
-        address_prefix    = subnet.address_prefix
-        resource_group    = vnet.resource_group
-        location          = vnet.location
-        subnet_routes     = subnet.routes
-        route_table_name  = subnet.routes != null ? "rt-${lower(replace(subnet_name, "Subnet", "sn"))}-${replace(vnet.vnet_name, "vnet-", "")}" : null
-      }
-    ]
-  ])
-
-  # Define Route Tables per Subnet
-  spoke_subnet_route_tables = {
-    for subnet in local.spoke_subnets :
-    subnet.route_table_name => {
-      location            = subnet.location
-      resource_group_name = subnet.resource_group
-      routes              = subnet.subnet_routes
-    }
-    if subnet.subnet_routes != null
-  }
-
-  spoke_all_route_tables = spoke_subnet_route_tables
-}
-
-# Create Spoke Virtual Networks
-resource "azurerm_virtual_network" "spoke_vnets" {
-  for_each = local.spoke_virtual_networks
-
-  name                = each.value.vnet_name
-  location            = each.value.location
-  resource_group_name = each.value.resource_group
-  address_space       = each.value.address_space
-  dns_servers         = each.value.dns_servers
-}
-
-# Create Spoke Subnets
-resource "azurerm_subnet" "spoke_subnets" {
-  for_each = { for subnet in local.spoke_subnets : subnet.key => subnet }
-
-  name                 = each.value.subnet_name
-  address_prefixes     = [each.value.address_prefix]
-  resource_group_name  = each.value.resource_group
-  virtual_network_name = azurerm_virtual_network.spoke_vnets[each.value.vnet_name].name
-}
-
-# Create Spoke Route Tables
-resource "azurerm_route_table" "spoke_rt" {
-  for_each = local.spoke_all_route_tables
-
-  name                = each.key
-  location            = each.value.location
-  resource_group_name = each.value.resource_group_name
-
-  dynamic "route" {
-    for_each = [for route_name, route in each.value.routes : merge(route, { name = route_name })]
-
-    content {
-      name                   = route.value.name
-      address_prefix         = route.value.address_prefix
-      next_hop_type          = route.value.next_hop_type
-      next_hop_in_ip_address = lookup(route.value, "next_hop_in_ip_address", null)
-    }
-  }
-}
-
-# Associate Route Tables with Spoke Subnets
-resource "azurerm_subnet_route_table_association" "spoke_assoc" {
-  for_each = {
-    for subnet in local.spoke_subnets :
-    subnet.key => subnet
-    if subnet.route_table_name != null
-  }
-
-  subnet_id      = azurerm_subnet.spoke_subnets[each.key].id
-  route_table_id = azurerm_route_table.spoke_rt[each.value.route_table_name].id
-}
-
-# Peering from Spoke to Hub
-resource "azurerm_virtual_network_peering" "hub_spoke" {
-  for_each = local.spoke_virtual_networks
-
-  name                      = "peering-${each.value.vnet_name}-to-hub"
-  resource_group_name       = each.value.resource_group
-  virtual_network_name      = each.value.vnet_name
-  remote_virtual_network_id = each.value.hub.id
-
-  allow_virtual_network_access = true
-  allow_forwarded_traffic      = true
-  allow_gateway_transit        = false
-  use_remote_gateways          = false
-}
-
-# Peering from Hub to Spoke
-resource "azurerm_virtual_network_peering" "spoke_hub" {
-  for_each = local.spoke_virtual_networks
-
-  name                      = "peering-hub-to-${each.value.vnet_name}"
-  resource_group_name       = each.value.hub.resource_group_name
-  virtual_network_name      = each.value.hub.name
-  remote_virtual_network_id = azurerm_virtual_network.spoke_vnets[each.key].id
-
-  allow_virtual_network_access = true
-  allow_forwarded_traffic      = true
-  allow_gateway_transit        = false
-  use_remote_gateways          = false
-}
-
-# Spoke NSGs and Associations
-resource "azurerm_network_security_group" "spoke_nsgs" {
-  for_each = {
-    for subnet in local.spoke_subnets :
-    subnet.key => subnet
-    if var.enable_nsgs && !contains(["AzureFirewallSubnet", "AzureBastionSubnet", "GatewaySubnet", "AppGatewaySubnet"], subnet.subnet_name)
-  }
-
-  name                = "nsg-${each.value.vnet_name}-${each.value.subnet_name}"
-  location            = each.value.location
-  resource_group_name = each.value.resource_group
-}
-
-resource "azurerm_subnet_network_security_group_association" "spoke_nsg_assoc" {
-  for_each = azurerm_network_security_group.spoke_nsgs
-
-  subnet_id                 = azurerm_subnet.spoke_subnets[each.key].id
-  network_security_group_id = each.value.id
-}
-
 
 ######### filename: azure_traffic_manager.tf #########
 
@@ -1134,7 +775,7 @@ resource "azurerm_windows_virtual_machine" "vms" {
   for_each = { for k, v in azurerm_network_interface.nics : k => v if contains(keys(local.windows_vms), k) }
 
   name                              = each.key
-  resource_group_name               = local.virtual_networks[local.windows_vms[each.key].vnet_name].resource_group
+  resource_group_name               = each.value.rg_name
   location                          = var.loc
   size                              = "Standard_B2ms"
   admin_username                    = var.admin_username
@@ -1165,7 +806,7 @@ resource "azurerm_linux_virtual_machine" "vms" {
   for_each = { for k, v in azurerm_network_interface.nics : k => v if contains(keys(local.linux_vms), k) }
 
   name                              = each.key
-  resource_group_name               = local.virtual_networks[local.linux_vms[each.key].vnet_name].resource_group
+  resource_group_name               = each.value.rg_name
   location                          = var.loc
   size                              = "Standard_B2ms"
   disable_password_authentication   = false
@@ -1254,7 +895,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "blob_link" {
   name                  = "blob-hub-vnet-link"
   resource_group_name   = azurerm_resource_group.hub.name
   private_dns_zone_name = azurerm_private_dns_zone.blob.name
-  virtual_network_id    = azurerm_virtual_network.vnets["vnet-hub-${var.loc_short}-01"].id
+  virtual_network_id    = azurerm_virtual_network.hub_vnets["vnet-hub-${var.loc_short}-01"].id
   registration_enabled  = false
 }
 
@@ -1262,7 +903,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "file_link" {
   name                  = "file-hub-vnet-link"
   resource_group_name   = azurerm_resource_group.hub.name
   private_dns_zone_name = azurerm_private_dns_zone.file.name
-  virtual_network_id    = azurerm_virtual_network.vnets["vnet-hub-${var.loc_short}-01"].id
+  virtual_network_id    = azurerm_virtual_network.hub_vnets["vnet-hub-${var.loc_short}-01"].id
   registration_enabled  = false
 }
 
@@ -1306,6 +947,404 @@ resource "azurerm_bastion_host" "bastion" {
   }
 
   sku = "Standard"
+}
+
+
+######### filename: vnets_spoke.tf #########
+# Local variable for the Domain Controller IP
+locals {
+  spoke_vnets = {
+    "vnet-adds-${var.loc_short}-01" = {
+      hub            = azurerm_virtual_network.hub_vnets["vnet-hub-${var.loc_short}-01"]
+      vnet_name      = "vnet-adds-${var.loc_short}-01"
+      location       = var.loc
+      address_space  = ["10.0.16.0/20"]
+      resource_group = azurerm_resource_group.identity.name
+      dns_servers    = [local.domain_controller_ip]
+      subnets = {
+        "ADDSSubnet" = {
+          address_prefix = "10.0.16.0/24"
+          routes = {
+            "Internet-to-Firewall" = {
+              address_prefix         = "0.0.0.0/0"
+              next_hop_type          = "VirtualAppliance"
+              next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
+            }
+            "VNetLocal-to-Firewall" = {
+              address_prefix         = "10.0.16.0/20"
+              next_hop_type          = "VirtualAppliance"
+              next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
+            }
+            "AppGatewaySubnet-to-Firewall" = {
+              address_prefix         = azurerm_subnet.hub_subnets["vnet-hub-${var.loc_short}-01/AppGatewaySubnet"].address_prefixes[0]
+              next_hop_type          = "VirtualAppliance"
+              next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
+            }
+          }
+        }
+        "PrivateEndpointSubnet" = {
+          address_prefix = "10.0.31.0/24"
+          routes         = null
+        }
+      }
+      vnet_routes = null
+    }
+    "vnet-main-${var.loc_short}-01" = {
+      hub            = azurerm_virtual_network.hub_vnets["vnet-hub-${var.loc_short}-01"]
+      vnet_name      = "vnet-main-${var.loc_short}-01"
+      location       = var.loc
+      address_space  = ["10.0.32.0/20"]
+      resource_group = azurerm_resource_group.main.name
+      dns_servers    = [local.domain_controller_ip]
+      subnets = {
+        "WindowsSubnet" = {
+          address_prefix = "10.0.32.0/24"
+          routes = {
+            "Internet-to-Firewall" = {
+              address_prefix         = "0.0.0.0/0"
+              next_hop_type          = "VirtualAppliance"
+              next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
+            }
+            "VNetLocal-to-Firewall" = {
+              address_prefix         = "10.0.32.0/20"
+              next_hop_type          = "VirtualAppliance"
+              next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
+            }
+            "AppGatewaySubnet-to-Firewall" = {
+              address_prefix         = azurerm_subnet.hub_subnets["vnet-hub-${var.loc_short}-01/AppGatewaySubnet"].address_prefixes[0]
+              next_hop_type          = "VirtualAppliance"
+              next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
+            }
+          }
+        }
+        "LinuxSubnet" = {
+          address_prefix = "10.0.33.0/24"
+          routes = {
+            "Internet-to-Firewall" = {
+              address_prefix         = "0.0.0.0/0"
+              next_hop_type          = "VirtualAppliance"
+              next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
+            }
+            "VNetLocal-to-Firewall" = {
+              address_prefix         = "10.0.32.0/20"
+              next_hop_type          = "VirtualAppliance"
+              next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
+            }
+            "AppGatewaySubnet-to-Firewall" = {
+              address_prefix         = azurerm_subnet.hub_subnets["vnet-hub-${var.loc_short}-01/AppGatewaySubnet"].address_prefixes[0]
+              next_hop_type          = "VirtualAppliance"
+              next_hop_in_ip_address = azurerm_firewall.primary.ip_configuration[0].private_ip_address
+            }
+          }
+        }
+        "PrivateEndpointSubnet" = {
+          address_prefix = "10.0.47.0/24"
+          routes         = null
+        }
+      }
+      vnet_routes = null
+    }
+  }
+
+  # Flatten Subnets and Prepare Route Table Names
+  spoke_subnets = flatten([
+    for vnet_key, vnet in local.spoke_vnets : [
+      for subnet_name, subnet in vnet.subnets : {
+        key               = "${vnet_key}/${subnet_name}"
+        vnet_name         = vnet.vnet_name
+        subnet_name       = subnet_name
+        address_prefix    = subnet.address_prefix
+        resource_group    = vnet.resource_group
+        location          = vnet.location
+        subnet_routes     = subnet.routes
+        route_table_name  = subnet.routes != null ? "rt-${lower(replace(subnet_name, "Subnet", "sn"))}-${replace(vnet.vnet_name, "vnet-", "")}" : null
+      }
+    ]
+  ])
+
+  # Define Route Tables per Subnet
+  spoke_subnet_route_tables = {
+    for subnet in local.spoke_subnets :
+    subnet.route_table_name => {
+      location            = subnet.location
+      resource_group_name = subnet.resource_group
+      routes              = subnet.subnet_routes
+    }
+    if subnet.subnet_routes != null
+  }
+
+  spoke_all_route_tables = spoke_subnet_route_tables
+}
+
+# Create Spoke Virtual Networks
+resource "azurerm_virtual_network" "spoke_vnets" {
+  for_each = local.spoke_vnets
+
+  name                = each.value.vnet_name
+  location            = each.value.location
+  resource_group_name = each.value.resource_group
+  address_space       = each.value.address_space
+  dns_servers         = each.value.dns_servers
+}
+
+# Create Spoke Subnets
+resource "azurerm_subnet" "spoke_subnets" {
+  for_each = { for subnet in local.spoke_subnets : subnet.key => subnet }
+
+  name                 = each.value.subnet_name
+  address_prefixes     = [each.value.address_prefix]
+  resource_group_name  = each.value.resource_group
+  virtual_network_name = azurerm_virtual_network.spoke_vnets[each.value.vnet_name].name
+}
+
+# Create Spoke Route Tables
+resource "azurerm_route_table" "spoke_rt" {
+  for_each = local.spoke_all_route_tables
+
+  name                = each.key
+  location            = each.value.location
+  resource_group_name = each.value.resource_group_name
+
+  dynamic "route" {
+    for_each = [for route_name, route in each.value.routes : merge(route, { name = route_name })]
+
+    content {
+      name                   = route.value.name
+      address_prefix         = route.value.address_prefix
+      next_hop_type          = route.value.next_hop_type
+      next_hop_in_ip_address = lookup(route.value, "next_hop_in_ip_address", null)
+    }
+  }
+}
+
+# Associate Route Tables with Spoke Subnets
+resource "azurerm_subnet_route_table_association" "spoke_assoc" {
+  for_each = {
+    for subnet in local.spoke_subnets :
+    subnet.key => subnet
+    if subnet.route_table_name != null
+  }
+
+  subnet_id      = azurerm_subnet.spoke_subnets[each.key].id
+  route_table_id = azurerm_route_table.spoke_rt[each.value.route_table_name].id
+}
+
+# Peering from Spoke to Hub
+resource "azurerm_virtual_network_peering" "hub_spoke" {
+  for_each = local.spoke_vnets
+
+  name                      = "peering-${each.value.vnet_name}-to-hub"
+  resource_group_name       = each.value.resource_group
+  virtual_network_name      = each.value.vnet_name
+  remote_virtual_network_id = each.value.hub.id
+
+  allow_virtual_network_access = true
+  allow_forwarded_traffic      = true
+  allow_gateway_transit        = false
+  use_remote_gateways          = false
+}
+
+# Peering from Hub to Spoke
+resource "azurerm_virtual_network_peering" "spoke_hub" {
+  for_each = local.spoke_vnets
+
+  name                      = "peering-hub-to-${each.value.vnet_name}"
+  resource_group_name       = each.value.hub.resource_group_name
+  virtual_network_name      = each.value.hub.name
+  remote_virtual_network_id = azurerm_virtual_network.spoke_vnets[each.key].id
+
+  allow_virtual_network_access = true
+  allow_forwarded_traffic      = true
+  allow_gateway_transit        = false
+  use_remote_gateways          = false
+}
+
+# Spoke NSGs and Associations
+resource "azurerm_network_security_group" "spoke_nsgs" {
+  for_each = {
+    for subnet in local.spoke_subnets :
+    subnet.key => subnet
+    if var.enable_nsgs && !contains(["AzureFirewallSubnet", "AzureBastionSubnet", "GatewaySubnet", "AppGatewaySubnet"], subnet.subnet_name)
+  }
+
+  name                = "nsg-${each.value.vnet_name}-${each.value.subnet_name}"
+  location            = each.value.location
+  resource_group_name = each.value.resource_group
+}
+
+resource "azurerm_subnet_network_security_group_association" "spoke_nsg_assoc" {
+  for_each = azurerm_network_security_group.spoke_nsgs
+
+  subnet_id                 = azurerm_subnet.spoke_subnets[each.key].id
+  network_security_group_id = each.value.id
+}
+
+
+######### filename: vnets_hub.tf #########
+# Local variable for the Domain Controller IP
+locals {
+  hub_vnets = {
+    "vnet-hub-${var.loc_short}-01" = {
+      vnet_name      = "vnet-hub-${var.loc_short}-01"
+      location       = var.loc
+      address_space  = ["10.0.0.0/20"]
+      resource_group = azurerm_resource_group.hub.name
+      dns_servers    = [local.domain_controller_ip]
+      vnet_routes    = null
+      subnets = {
+        "AzureFirewallSubnet" = {
+          address_prefix = "10.0.0.0/24"
+          routes = {
+            "Internet-Out" = {
+              address_prefix = "0.0.0.0/0"
+              next_hop_type  = "Internet"
+            }
+          }
+        }
+        "AzureBastionSubnet" = {
+          address_prefix = "10.0.1.0/24"
+          routes         = null
+        }
+        "GatewaySubnet" = {
+          address_prefix = "10.0.2.0/24"
+          routes = {
+            "MainVNet-to-Firewall" = {
+              address_prefix         = "10.0.32.0/20"
+              next_hop_type          = "VirtualAppliance"
+              next_hop_in_ip_address = "10.0.0.4"
+            }
+            "ADDSVNet-to-Firewall" = {
+              address_prefix         = "10.0.16.0/20"
+              next_hop_type          = "VirtualAppliance"
+              next_hop_in_ip_address = "10.0.0.4"
+            }
+          }
+        }
+        "AppGatewaySubnet" = {
+          address_prefix = "10.0.3.0/24"
+          routes         = null
+        }
+        "PrivateEndpointSubnet" = {
+          address_prefix = "10.0.15.0/24"
+          routes         = null
+        }
+      }
+    }
+  }
+
+  # Flatten subnets and prepare route table names
+  hub_subnets = flatten([
+    for vnet_key, vnet in local.hub_vnets : [
+      for subnet_name, subnet in vnet.subnets : {
+        key               = "${vnet_key}/${subnet_name}"
+        vnet_name         = vnet.vnet_name
+        subnet_name       = subnet_name
+        address_prefix    = subnet.address_prefix
+        resource_group    = vnet.resource_group
+        location          = vnet.location
+        subnet_routes     = subnet.routes
+        route_table_name  = subnet.routes != null ? "rt-${lower(replace(subnet_name, "Subnet", "sn"))}-${replace(vnet.vnet_name, "vnet-", "")}" : null
+      }
+    ]
+  ])
+
+  # Define Route Tables per VNet
+  hub_vnet_route_tables = {
+    for vnet_key, vnet in local.hub_vnets :
+    "rt-${replace(vnet.vnet_name, "vnet-", "")}" => {
+      location            = vnet.location
+      resource_group_name = vnet.resource_group
+      routes              = vnet.vnet_routes
+    }
+    if vnet.vnet_routes != null
+  }
+
+  # Define Route Tables per Subnet
+  hub_subnet_route_tables = {
+    for subnet in local.hub_subnets :
+    subnet.route_table_name => {
+      location            = subnet.location
+      resource_group_name = subnet.resource_group
+      routes              = subnet.subnet_routes
+    }
+    if subnet.subnet_routes != null
+  }
+
+  # Merge all route tables
+  hub_all_route_tables = merge(local.hub_vnet_route_tables, local.hub_subnet_route_tables)
+}
+
+# Create Hub Virtual Networks
+resource "azurerm_virtual_network" "hub_vnets" {
+  for_each = local.hub_vnets
+
+  name                = each.value.vnet_name
+  location            = each.value.location
+  resource_group_name = each.value.resource_group
+  address_space       = each.value.address_space
+  dns_servers         = each.value.dns_servers
+}
+
+# Create Hub Subnets
+resource "azurerm_subnet" "hub_subnets" {
+  for_each = { for subnet in local.hub_subnets : subnet.key => subnet }
+
+  name                 = each.value.subnet_name
+  address_prefixes     = [each.value.address_prefix]
+  resource_group_name  = each.value.resource_group
+  virtual_network_name = azurerm_virtual_network.hub_vnets[each.value.vnet_name].name
+}
+
+# Create Hub Route Tables
+resource "azurerm_route_table" "hub_rt" {
+  for_each = local.hub_all_route_tables
+
+  name                = each.key
+  location            = each.value.location
+  resource_group_name = each.value.resource_group_name
+
+  dynamic "route" {
+    for_each = [for route_name, route in each.value.routes : merge(route, { name = route_name })]
+
+    content {
+      name                   = route.value.name
+      address_prefix         = route.value.address_prefix
+      next_hop_type          = route.value.next_hop_type
+      next_hop_in_ip_address = lookup(route.value, "next_hop_in_ip_address", null)
+    }
+  }
+}
+
+# Associate Route Tables with Hub Subnets
+resource "azurerm_subnet_route_table_association" "hub_assoc" {
+  for_each = {
+    for subnet in local.hub_subnets :
+    subnet.key => subnet
+    if subnet.route_table_name != null
+  }
+
+  subnet_id      = azurerm_subnet.hub_subnets[each.key].id
+  route_table_id = azurerm_route_table.hub_rt[each.value.route_table_name].id
+}
+
+# Hub NSGs and Associations (if needed)
+resource "azurerm_network_security_group" "hub_nsgs" {
+  for_each = {
+    for subnet in local.hub_subnets :
+    subnet.key => subnet
+    if var.enable_nsgs && !contains(["AzureFirewallSubnet", "AzureBastionSubnet", "GatewaySubnet", "AppGatewaySubnet"], subnet.subnet_name)
+  }
+
+  name                = "nsg-${each.value.vnet_name}-${each.value.subnet_name}"
+  location            = each.value.location
+  resource_group_name = each.value.resource_group
+}
+
+resource "azurerm_subnet_network_security_group_association" "hub_nsg_assoc" {
+  for_each = azurerm_network_security_group.hub_nsgs
+
+  subnet_id                 = azurerm_subnet.hub_subnets[each.key].id
+  network_security_group_id = each.value.id
 }
 
 

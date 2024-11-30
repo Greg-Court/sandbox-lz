@@ -1,6 +1,6 @@
 # Local variable for the Domain Controller IP
 locals {
-  hub_virtual_networks = {
+  hub_vnets = {
     "vnet-hub-${var.loc_short}-01" = {
       vnet_name      = "vnet-hub-${var.loc_short}-01"
       location       = var.loc
@@ -51,23 +51,23 @@ locals {
 
   # Flatten subnets and prepare route table names
   hub_subnets = flatten([
-    for vnet_key, vnet in local.hub_virtual_networks : [
+    for vnet_key, vnet in local.hub_vnets : [
       for subnet_name, subnet in vnet.subnets : {
-        key               = "${vnet_key}/${subnet_name}"
-        vnet_name         = vnet.vnet_name
-        subnet_name       = subnet_name
-        address_prefix    = subnet.address_prefix
-        resource_group    = vnet.resource_group
-        location          = vnet.location
-        subnet_routes     = subnet.routes
-        route_table_name  = subnet.routes != null ? "rt-${lower(replace(subnet_name, "Subnet", "sn"))}-${replace(vnet.vnet_name, "vnet-", "")}" : null
+        key              = "${vnet_key}/${subnet_name}"
+        vnet_name        = vnet.vnet_name
+        subnet_name      = subnet_name
+        address_prefix   = subnet.address_prefix
+        resource_group   = vnet.resource_group
+        location         = vnet.location
+        subnet_routes    = subnet.routes
+        route_table_name = subnet.routes != null ? "rt-${lower(replace(subnet_name, "Subnet", "sn"))}-${replace(vnet.vnet_name, "vnet-", "")}" : null
       }
     ]
   ])
 
   # Define Route Tables per VNet
   hub_vnet_route_tables = {
-    for vnet_key, vnet in local.hub_virtual_networks :
+    for vnet_key, vnet in local.hub_vnets :
     "rt-${replace(vnet.vnet_name, "vnet-", "")}" => {
       location            = vnet.location
       resource_group_name = vnet.resource_group
@@ -93,7 +93,7 @@ locals {
 
 # Create Hub Virtual Networks
 resource "azurerm_virtual_network" "hub_vnets" {
-  for_each = local.hub_virtual_networks
+  for_each = local.hub_vnets
 
   name                = each.value.vnet_name
   location            = each.value.location

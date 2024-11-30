@@ -9,7 +9,7 @@ locals {
     },
     "vm-ws22-${var.loc_short}-01" = {
       vnet_name   = "vnet-main-${var.loc_short}-01"
-      rg_name            = azurerm_resource_group.main.name
+      rg_name     = azurerm_resource_group.main.name
       subnet_name = "WindowsSubnet"
       os          = "WS22"
     }
@@ -17,7 +17,7 @@ locals {
   linux_vms = {
     "vm-ubu24-${var.loc_short}-01" = {
       vnet_name   = "vnet-main-${var.loc_short}-01"
-      rg_name            = azurerm_resource_group.main.name
+      rg_name     = azurerm_resource_group.main.name
       subnet_name = "LinuxSubnet"
       os          = "UBU24"
     }
@@ -58,7 +58,7 @@ resource "azurerm_windows_virtual_machine" "vms" {
   for_each = { for k, v in azurerm_network_interface.nics : k => v if contains(keys(local.windows_vms), k) }
 
   name                              = each.key
-  resource_group_name               = local.virtual_networks[local.windows_vms[each.key].vnet_name].resource_group
+  resource_group_name               = local.windows_vms[each.key].rg_name
   location                          = var.loc
   size                              = "Standard_B2ms"
   admin_username                    = var.admin_username
@@ -89,7 +89,7 @@ resource "azurerm_linux_virtual_machine" "vms" {
   for_each = { for k, v in azurerm_network_interface.nics : k => v if contains(keys(local.linux_vms), k) }
 
   name                              = each.key
-  resource_group_name               = local.virtual_networks[local.linux_vms[each.key].vnet_name].resource_group
+  resource_group_name               = local.linux_vms[each.key].rg_name
   location                          = var.loc
   size                              = "Standard_B2ms"
   disable_password_authentication   = false
