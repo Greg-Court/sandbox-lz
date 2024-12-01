@@ -77,6 +77,7 @@ locals {
       resource_group_name = vnet.resource_group
       routes              = vnet.vnet_routes
       vnet_name           = vnet.vnet_name
+      bgp_enabled         = lookup(vnet, "bgp_enabled", false)
     }
     if vnet.vnet_routes != null
   }
@@ -89,6 +90,7 @@ locals {
       resource_group_name = subnet.resource_group
       routes              = subnet.subnet_routes
       vnet_name           = subnet.vnet_name
+      bgp_enabled         = lookup(subnet, "bgp_enabled", false)
     }
     if subnet.route_table_name != null
   }
@@ -127,13 +129,7 @@ resource "azurerm_route_table" "hub_rt" {
   resource_group_name = each.value.resource_group_name
 
   # Dynamically enable/disable BGP route propagation
-  bgp_route_propagation_enabled = try(
-    flatten([
-      for subnet in local.spoke_subnets :
-      subnet if subnet.vnet_name == each.value.vnet_name && subnet.route_table_name == each.key
-    ])[0].bgp_enabled,
-    false
-  )
+  bgp_route_propagation_enabled = each.value.bgp_enabled
 
   dynamic "route" {
     for_each = each.value.routes != null ? [for route_name, route in each.value.routes : merge(route, { name = route_name })] : []
