@@ -8,8 +8,8 @@ locals {
           access                     = "Allow"
           protocol                   = "Tcp"
           source_port_range          = "*"
-          destination_port_range     = "22"
-          source_address_prefix      = "*"
+          destination_port_range     = "10"
+          source_address_prefix      = "10.0.0.10"
           destination_address_prefix = "*"
         }
       }
