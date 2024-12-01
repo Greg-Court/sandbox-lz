@@ -11,6 +11,7 @@ locals {
 }
 
 resource "azurerm_public_ip" "appgw" {
+  count               = var.deploy_appgw ? 1 : 0
   name                = local.appgw_public_ip_name
   location            = var.loc
   resource_group_name = azurerm_resource_group.hub.name
@@ -19,6 +20,7 @@ resource "azurerm_public_ip" "appgw" {
 }
 
 resource "azurerm_application_gateway" "appgw" {
+  count               = var.deploy_appgw ? 1 : 0
   name                = local.appgw_name
   location            = var.loc
   resource_group_name = azurerm_resource_group.hub.name
@@ -41,7 +43,7 @@ resource "azurerm_application_gateway" "appgw" {
 
   frontend_ip_configuration {
     name                 = local.frontend_ip_configuration_name
-    public_ip_address_id = azurerm_public_ip.appgw.id
+    public_ip_address_id = azurerm_public_ip.appgw[0].id
   }
 
   backend_address_pool {
