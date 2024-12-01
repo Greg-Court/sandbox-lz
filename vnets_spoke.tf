@@ -195,6 +195,27 @@ resource "azurerm_subnet_route_table_association" "spoke_assoc" {
   subnet_id      = each.value.subnet_id
   route_table_id = each.value.route_table_id
 }
+
+# Spoke NSGs and Associations
+resource "azurerm_network_security_group" "spoke_nsgs" {
+  for_each = {
+    for subnet in local.spoke_subnets :
+    subnet.key => subnet
+    if var.enable_nsgs && !contains(["AzureFirewallSubnet", "AzureBastionSubnet", "GatewaySubnet"], subnet.subnet_name)
+  }
+
+  name                = "nsg-${lower(replace(each.value.subnet_name, "Subnet", "sn"))}-${replace(each.value.vnet_name, "vnet-", "")}"
+  location            = each.value.location
+  resource_group_name = each.value.resource_group
+}
+
+resource "azurerm_subnet_network_security_group_association" "spoke_nsg_assoc" {
+  for_each = azurerm_network_security_group.spoke_nsgs
+
+  subnet_id                 = azurerm_subnet.spoke_subnets[each.key].id
+  network_security_group_id = each.value.id
+}
+
 # Peering from Spoke to Hub
 resource "azurerm_virtual_network_peering" "hub_spoke" {
   for_each = local.spoke_vnets
@@ -223,24 +244,4 @@ resource "azurerm_virtual_network_peering" "spoke_hub" {
   allow_forwarded_traffic      = true
   allow_gateway_transit        = false
   use_remote_gateways          = false
-}
-
-# Spoke NSGs and Associations
-resource "azurerm_network_security_group" "spoke_nsgs" {
-  for_each = {
-    for subnet in local.spoke_subnets :
-    subnet.key => subnet
-    if var.enable_nsgs && !contains(["AzureFirewallSubnet", "AzureBastionSubnet", "GatewaySubnet"], subnet.subnet_name)
-  }
-
-  name                = "nsg-${lower(replace(each.value.subnet_name, "Subnet", "sn"))}-${replace(each.value.vnet_name, "vnet-", "")}"
-  location            = each.value.location
-  resource_group_name = each.value.resource_group
-}
-
-resource "azurerm_subnet_network_security_group_association" "spoke_nsg_assoc" {
-  for_each = azurerm_network_security_group.spoke_nsgs
-
-  subnet_id                 = azurerm_subnet.spoke_subnets[each.key].id
-  network_security_group_id = each.value.id
 }
