@@ -9,7 +9,7 @@ locals {
       address_space  = ["10.0.0.0/20"]
       resource_group = azurerm_resource_group.hub.name
       dns_servers    = [local.domain_controller_ip]
-      vnet_routes = {
+      routes = {
         "MainVNet-to-Firewall" = {
           address_prefix         = "10.0.32.0/20"
           next_hop_type          = "VirtualAppliance"
@@ -34,19 +34,15 @@ locals {
         }
         "AzureBastionSubnet" = {
           address_prefix = "10.0.1.0/24"
-          routes         = null
         }
         "GatewaySubnet" = {
           address_prefix = "10.0.2.0/24"
-          routes         = null
         }
         "AppGatewaySubnet" = {
           address_prefix = "10.0.3.0/24"
-          routes         = null
         }
         "PrivateEndpointSubnet" = {
           address_prefix = "10.0.15.0/24"
-          routes         = null
         }
       }
     }
@@ -62,9 +58,10 @@ locals {
         address_prefix        = subnet.address_prefix
         resource_group        = vnet.resource_group
         location              = vnet.location
-        subnet_routes         = subnet.routes
-        route_table_name      = subnet.routes != null ? "rt-${lower(replace(subnet_name, "Subnet", "sn"))}-${replace(vnet.vnet_name, "vnet-", "")}" : null
-        vnet_route_table_name = vnet.vnet_routes != null ? "rt-${replace(vnet.vnet_name, "vnet-", "")}" : null
+        bgp_enabled           = lookup(subnet, "bgp_enabled", false)
+        subnet_routes         = lookup(subnet, "routes", null)
+        route_table_name      = lookup(subnet, "routes", null) != null ? "rt-${lower(replace(subnet_name, "Subnet", "sn"))}-${replace(vnet.vnet_name, "vnet-", "")}" : null
+        vnet_route_table_name = lookup(vnet, "routes", null) != null ? "rt-${replace(vnet.vnet_name, "vnet-", "")}" : null
       }
     ]
   ])
@@ -75,11 +72,11 @@ locals {
     "rt-${replace(vnet.vnet_name, "vnet-", "")}" => {
       location            = vnet.location
       resource_group_name = vnet.resource_group
-      routes              = vnet.vnet_routes
       vnet_name           = vnet.vnet_name
+      routes              = lookup(vnet, "routes", null)
       bgp_enabled         = lookup(vnet, "bgp_enabled", false)
     }
-    if vnet.vnet_routes != null
+    if lookup(vnet, "routes", null) != null
   }
 
   # Define Route Tables per Subnet
@@ -90,7 +87,7 @@ locals {
       resource_group_name = subnet.resource_group
       routes              = subnet.subnet_routes
       vnet_name           = subnet.vnet_name
-      bgp_enabled         = lookup(subnet, "bgp_enabled", false)
+      bgp_enabled         = subnet.bgp_enabled
     }
     if subnet.route_table_name != null
   }

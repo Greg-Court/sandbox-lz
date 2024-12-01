@@ -83,6 +83,12 @@ resource "azurerm_windows_virtual_machine" "vms" {
   boot_diagnostics {
     storage_account_uri = null
   }
+
+  lifecycle {
+    ignore_changes = [
+      vm_agent_platform_updates_enabled
+    ]
+  }
 }
 
 resource "azurerm_linux_virtual_machine" "vms" {
@@ -113,5 +119,11 @@ resource "azurerm_linux_virtual_machine" "vms" {
 
   boot_diagnostics {
     storage_account_uri = null
+  }
+
+  lifecycle {
+    ignore_changes = [
+      vm_agent_platform_updates_enabled
+    ]
   }
 }

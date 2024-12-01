@@ -44,8 +44,8 @@ resource "azurerm_network_security_rule" "custom_hub_nsg_rules" {
   source_port_range      = each.value.rule.source_port_range
   destination_port_range = each.value.rule.destination_port_range
 
-  source_address_prefix      = lookup(each.value.rule, "source_address_prefix", null)
-  source_address_prefixes    = lookup(each.value.rule, "source_address_prefixes", null)
+  source_address_prefix   = lookup(each.value.rule, "source_address_prefix", null)
+  source_address_prefixes = lookup(each.value.rule, "source_address_prefixes", null)
 
   destination_address_prefix   = lookup(each.value.rule, "destination_address_prefix", null)
   destination_address_prefixes = lookup(each.value.rule, "destination_address_prefixes", null)
