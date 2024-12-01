@@ -1,8 +1,8 @@
 locals {
-  custom_nsg_rules = {
+  custom_spoke_nsg_rules = {
     "vnet-main-uks-01/LinuxSubnet" = {
       rules = {
-        "TestNSGRule" = {
+        "TestLinuxNSGRule" = {
           priority                   = 1000
           direction                  = "Inbound"
           access                     = "Allow"
@@ -10,13 +10,13 @@ locals {
           source_port_range          = "*"
           destination_port_range     = "10"
           source_address_prefix      = "10.0.0.10"
-          destination_address_prefix = "*"
+          destination_address_prefix = "10.0.0.10"
         }
       }
     }
   }
-  custom_nsg_rules_flat = flatten([
-    for subnet_key, subnet_data in local.custom_nsg_rules : [
+  custom_spoke_nsg_rules_flat = flatten([
+    for subnet_key, subnet_data in local.custom_spoke_nsg_rules : [
       for rule_name, rule in subnet_data.rules : {
         subnet_key = subnet_key
         rule_name  = rule_name
@@ -27,9 +27,9 @@ locals {
 }
 
 
-resource "azurerm_network_security_rule" "custom_nsg_rules" {
+resource "azurerm_network_security_rule" "custom_spoke_nsg_rules" {
   for_each = {
-    for rule in local.custom_nsg_rules_flat :
+    for rule in local.custom_spoke_nsg_rules_flat :
     "${rule.subnet_key}-${rule.rule_name}" => rule
   }
 

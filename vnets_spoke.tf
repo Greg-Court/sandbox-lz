@@ -240,7 +240,7 @@ resource "azurerm_network_security_group" "spoke_nsgs" {
   for_each = {
     for subnet in local.spoke_subnets :
     subnet.key => subnet
-    if var.enable_nsgs && !contains(["AzureFirewallSubnet", "AzureBastionSubnet", "GatewaySubnet", "AppGatewaySubnet"], subnet.subnet_name)
+    if var.enable_nsgs && !contains(["AzureFirewallSubnet", "AzureBastionSubnet", "GatewaySubnet"], subnet.subnet_name)
   }
 
   name                = "nsg-${lower(replace(each.value.subnet_name, "Subnet", "sn"))}-${replace(each.value.vnet_name, "vnet-", "")}"
