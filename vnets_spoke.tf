@@ -120,10 +120,6 @@ locals {
   spoke_all_route_tables = merge(local.spoke_vnet_route_tables, local.spoke_subnet_route_tables)
 }
 
-# output "spoke_subnets_debug" {
-#   value = local.spoke_subnets
-# }
-
 # output "spoke_all_route_tables_debug" {
 #   value = local.spoke_all_route_tables
 # }
