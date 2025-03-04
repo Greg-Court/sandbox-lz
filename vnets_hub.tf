@@ -50,6 +50,9 @@ locals {
             }
           }
         }
+        "ADPROutboundSubnet" = {
+          address_prefix = "10.0.5.0/24"
+        }
         "PrivateEndpointSubnet" = {
           address_prefix = "10.0.15.0/24"
         }
