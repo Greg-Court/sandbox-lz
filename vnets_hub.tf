@@ -52,6 +52,16 @@ locals {
         }
         "ADPROutboundSubnet" = {
           address_prefix = "10.0.5.0/24"
+          delegation = {
+            name = "dnsresolver-delegation"
+            service_delegation = {
+              name    = "Microsoft.Network/dnsResolvers"
+              actions = ["Microsoft.Network/virtualNetworks/subnets/join/action"]
+            }
+          }
+        }
+        "VMSubnet" = {
+          address_prefix = "10.0.6.0/24"
         }
         "PrivateEndpointSubnet" = {
           address_prefix = "10.0.15.0/24"
@@ -74,6 +84,7 @@ locals {
         subnet_routes         = lookup(subnet, "routes", null)
         route_table_name      = lookup(subnet, "routes", null) != null ? "rt-${lower(replace(subnet_name, "Subnet", "sn"))}-${replace(vnet.vnet_name, "vnet-", "")}" : null
         vnet_route_table_name = lookup(vnet, "routes", null) != null ? "rt-${replace(vnet.vnet_name, "vnet-", "")}" : null
+        delegation            = lookup(subnet, "delegation", null) # New field for delegation
       }
     ]
   ])
@@ -127,6 +138,19 @@ resource "azurerm_subnet" "hub_subnets" {
   address_prefixes     = [each.value.address_prefix]
   resource_group_name  = each.value.resource_group
   virtual_network_name = azurerm_virtual_network.hub_vnets[each.value.vnet_name].name
+  dynamic "delegation" {
+    for_each = each.value.delegation != null ? [each.value.delegation] : []
+    content {
+      name = delegation.value.name
+      dynamic "service_delegation" {
+        for_each = delegation.value.service_delegation != null ? [delegation.value.service_delegation] : []
+        content {
+          name    = service_delegation.value.name
+          actions = service_delegation.value.actions
+        }
+      }
+    }
+  }
 }
 
 # Create Hub Route Tables

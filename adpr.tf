@@ -23,3 +23,21 @@ resource "azurerm_private_dns_resolver_dns_forwarding_ruleset" "azure_dns" {
     key = "value"
   }
 }
+
+resource "azurerm_private_dns_resolver_virtual_network_link" "main" {
+  name                  = "link-vnet-main-uks-01"
+  virtual_network_id    = azurerm_virtual_network.spoke_vnets["vnet-main-uks-01"].id
+  dns_forwarding_ruleset_id = azurerm_private_dns_resolver_dns_forwarding_ruleset.azure_dns.id
+}
+
+resource "azurerm_private_dns_resolver_virtual_network_link" "adds" {
+  name                  = "link-vnet-adds-uks-01"
+  virtual_network_id    = azurerm_virtual_network.spoke_vnets["vnet-adds-uks-01"].id
+  dns_forwarding_ruleset_id = azurerm_private_dns_resolver_dns_forwarding_ruleset.azure_dns.id
+}
+
+resource "azurerm_private_dns_resolver_virtual_network_link" "hub" {
+  name                  = "link-vnet-hub-uks-01"
+  virtual_network_id    = azurerm_virtual_network.hub_vnets["vnet-hub-uks-01"].id
+  dns_forwarding_ruleset_id = azurerm_private_dns_resolver_dns_forwarding_ruleset.azure_dns.id
+}
