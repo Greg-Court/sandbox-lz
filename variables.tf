@@ -67,3 +67,9 @@ variable "lng_address_space" {
   type        = list(string)
   default     = ["192.168.0.0/16"]
 }
+
+variable "azure_firewall_sku" {
+  description = "Azure Firewall SKU."
+  type        = string
+  default     = "Standard"
+}

@@ -41,6 +41,15 @@ locals {
         "AppGatewaySubnet" = {
           address_prefix = "10.0.3.0/24"
         }
+        "AzureFirewallManagementSubnet" = {
+          address_prefix = "10.0.4.0/24"
+          routes = {
+            "Internet-Out" = {
+              address_prefix = "0.0.0.0/0"
+              next_hop_type  = "Internet"
+            }
+          }
+        }
         "PrivateEndpointSubnet" = {
           address_prefix = "10.0.15.0/24"
         }
@@ -172,7 +181,7 @@ resource "azurerm_network_security_group" "hub_nsgs" {
   for_each = {
     for subnet in local.hub_subnets :
     subnet.key => subnet
-    if var.enable_nsgs && !contains(["AzureFirewallSubnet", "AzureBastionSubnet", "GatewaySubnet"], subnet.subnet_name)
+    if var.enable_nsgs && !contains(["AzureFirewallSubnet", "AzureBastionSubnet", "GatewaySubnet", "AzureFirewallManagementSubnet"], subnet.subnet_name)
   }
 
   name                = "nsg-${lower(replace(each.value.subnet_name, "Subnet", "sn"))}-${replace(each.value.vnet_name, "vnet-", "")}"

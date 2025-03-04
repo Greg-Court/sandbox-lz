@@ -37,9 +37,13 @@ resource "azurerm_firewall_policy" "primary" {
   name                = "afwp-hub-${var.loc_short}-01"
   resource_group_name = azurerm_resource_group.hub.name
   location            = var.loc
-  dns {
-    proxy_enabled = true
-    servers       = ["168.63.129.16"]
+  sku                 = var.azure_firewall_sku
+  dynamic "dns" {
+    for_each = var.azure_firewall_sku == "Basic" ? [] : [1]
+    content {
+      proxy_enabled = true
+      servers       = ["168.63.129.16"]
+    }
   }
 }
 
@@ -138,13 +142,16 @@ resource "azurerm_firewall_policy_rule_collection_group" "platform" {
       protocols             = ["TCP"]
     }
 
-    rule {
-      name              = "Windows-Time"
-      description       = "Windows Time"
-      source_ip_groups  = [azurerm_ip_group.internal.id]
-      destination_fqdns = ["time.windows.com"]
-      destination_ports = ["123"]
-      protocols         = ["UDP"]
+    dynamic "rule" {
+      for_each = var.azure_firewall_sku == "Basic" ? [] : [1]
+      content {
+        name              = "Windows-Time"
+        description       = "Windows Time"
+        source_ip_groups  = [azurerm_ip_group.internal.id]
+        destination_fqdns = ["time.windows.com"]
+        destination_ports = ["123"]
+        protocols         = ["UDP"]
+      }
     }
 
     rule {
