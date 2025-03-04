@@ -73,3 +73,9 @@ variable "azure_firewall_sku" {
   type        = string
   default     = "Standard"
 }
+
+variable "vnet_dns_servers" {
+  description = "DNS servers for the virtual networks."
+  type        = list(string)
+  default     = []
+}

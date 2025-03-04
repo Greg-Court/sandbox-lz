@@ -1,18 +1,18 @@
 locals {
   windows_vms = {
-    "vm-dc-${var.loc_short}-01" = {
-      vnet_name          = "vnet-adds-${var.loc_short}-01"
-      rg_name            = azurerm_resource_group.identity.name
-      subnet_name        = "ADDSSubnet"
-      private_ip_address = local.domain_controller_ip
-      os                 = "WS22"
-    },
-    "vm-ws22-${var.loc_short}-01" = {
-      vnet_name   = "vnet-main-${var.loc_short}-01"
-      rg_name     = azurerm_resource_group.main.name
-      subnet_name = "WindowsSubnet"
-      os          = "WS22"
-    }
+    # "vm-dc-${var.loc_short}-01" = {
+    #   vnet_name          = "vnet-adds-${var.loc_short}-01"
+    #   rg_name            = azurerm_resource_group.identity.name
+    #   subnet_name        = "ADDSSubnet"
+    #   private_ip_address = local.domain_controller_ip
+    #   os                 = "WS22"
+    # },
+    # "vm-ws22-${var.loc_short}-01" = {
+    #   vnet_name   = "vnet-main-${var.loc_short}-01"
+    #   rg_name     = azurerm_resource_group.main.name
+    #   subnet_name = "WindowsSubnet"
+    #   os          = "WS22"
+    # }
   }
   linux_vms = {
     "vm-ubu24-${var.loc_short}-01" = {

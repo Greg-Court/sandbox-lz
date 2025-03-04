@@ -8,20 +8,20 @@ locals {
   }))
 }
 
-resource "azurerm_virtual_machine_extension" "dc_extension" {
-  name                 = "DomainControllerExtension"
-  virtual_machine_id   = azurerm_windows_virtual_machine.vms["vm-dc-${var.loc_short}-01"].id
-  publisher            = "Microsoft.Compute"
-  type                 = "CustomScriptExtension"
-  type_handler_version = "1.9"
+# resource "azurerm_virtual_machine_extension" "dc_extension" {
+#   name                 = "DomainControllerExtension"
+#   virtual_machine_id   = azurerm_windows_virtual_machine.vms["vm-dc-${var.loc_short}-01"].id
+#   publisher            = "Microsoft.Compute"
+#   type                 = "CustomScriptExtension"
+#   type_handler_version = "1.9"
 
-  protected_settings = <<SETTINGS
-  {
-    "commandToExecute": "powershell -command \"[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${local.addc_script_base64}')) | Out-File -filepath dc_setup.ps1\" && powershell -ExecutionPolicy Unrestricted -File dc_setup.ps1"
-  }
-  SETTINGS
-}
-
-# output "decoded_script" {
-#   value = base64decode(local.addc_script_base64)
+#   protected_settings = <<SETTINGS
+#   {
+#     "commandToExecute": "powershell -command \"[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${local.addc_script_base64}')) | Out-File -filepath dc_setup.ps1\" && powershell -ExecutionPolicy Unrestricted -File dc_setup.ps1"
+#   }
+#   SETTINGS
 # }
+
+# # output "decoded_script" {
+# #   value = base64decode(local.addc_script_base64)
+# # }
